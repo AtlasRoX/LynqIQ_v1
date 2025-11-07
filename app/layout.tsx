@@ -11,9 +11,10 @@ export const metadata: Metadata = {
   generator: "v0.app",
 }
 
-import { LoadingProvider } from "@/lib/LoadingContext";
-import { GlobalLoadingIndicator } from "@/components/ui/GlobalLoadingIndicator";
-import { ThemeProvider } from "@/components/theme-provider";
+import { LoadingProvider } from "@/lib/LoadingContext"
+import { GlobalLoadingIndicator } from "@/components/ui/GlobalLoadingIndicator"
+import { ThemeProvider } from "@/components/theme-provider"
+import { ColorThemeProvider } from "@/components/dashboard/color-theme-provider"
 
 export default function RootLayout({
   children,
@@ -23,16 +24,13 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} font-sans antialiased`}>
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <LoadingProvider>
-            <GlobalLoadingIndicator />
-            {children}
-          </LoadingProvider>
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+          <ColorThemeProvider>
+            <LoadingProvider>
+              <GlobalLoadingIndicator />
+              {children}
+            </LoadingProvider>
+          </ColorThemeProvider>
         </ThemeProvider>
       </body>
     </html>

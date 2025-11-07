@@ -37,6 +37,11 @@ export default function LoginPage() {
     }
   }
 
+  const handleAutoFill = () => {
+    setEmail("admin@lynqiq.com")
+    setPassword("admin123#")
+  }
+
   return (
     <div className="flex min-h-screen w-full items-center justify-center p-4">
       <div className="w-full max-w-md">
@@ -74,6 +79,29 @@ export default function LoginPage() {
                 {isLoading ? "Signing in..." : "Sign In"}
               </Button>
             </form>
+
+            <div className="mt-6 space-y-3 rounded-lg border border-dashed border-muted-foreground/30 bg-muted/30 p-4">
+              <div className="text-sm font-medium text-muted-foreground">Demo Credentials</div>
+              <div className="space-y-1.5 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Email:</span>
+                  <code className="rounded bg-background px-2 py-1 font-mono text-foreground">admin@lynqiq.com</code>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Password:</span>
+                  <code className="rounded bg-background px-2 py-1 font-mono">•••••••••</code>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full text-xs bg-transparent"
+                onClick={handleAutoFill}
+              >
+                Auto Fill Demo Credentials
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </div>

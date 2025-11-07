@@ -28,34 +28,36 @@ export function KPICard({
 }: KPICardProps) {
   return (
     <Card
-      className={`p-6 border-l-4 transition-all hover:shadow-xl hover:-translate-y-1 ${
-        highlight ? "border-primary bg-primary/5" : "border-muted bg-card"
+      className={`p-5 md:p-6 border-l-4 transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 ${
+        highlight ? "border-primary bg-gradient-to-br from-primary/5 to-primary/2" : "border-muted bg-card"
       } ${className}`}
     >
-      <div className="flex items-start justify-between">
-        <div className="flex-1">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex-1 min-w-0">
           <TooltipProvider>
             <Tooltip>
-              <TooltipTrigger>
-                <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wider truncate">{title}</p>
+              <TooltipTrigger asChild>
+                <p className="text-xs md:text-sm font-semibold text-muted-foreground uppercase tracking-wider truncate">
+                  {title}
+                </p>
               </TooltipTrigger>
               <TooltipContent>
                 <p>{title}</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
-          <div className="mt-3 flex items-baseline gap-2">
+          <div className="mt-2 md:mt-3 flex items-baseline gap-2 flex-wrap">
             <TooltipProvider>
               <Tooltip>
-                <TooltipTrigger>
-                  <p className="text-3xl lg:text-4xl font-bold text-foreground truncate">{value}</p>
+                <TooltipTrigger asChild>
+                  <p className="text-2xl md:text-3xl lg:text-4xl font-bold text-foreground truncate">{value}</p>
                 </TooltipTrigger>
                 <TooltipContent>
                   <p>{value}</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
-            {unit && <span className="text-sm lg:text-base font-medium text-muted-foreground">{unit}</span>}
+            {unit && <span className="text-xs md:text-sm font-medium text-muted-foreground">{unit}</span>}
           </div>
           {trend !== undefined && (
             <div className="mt-3 flex items-center gap-1">
@@ -72,7 +74,13 @@ export function KPICard({
             </div>
           )}
         </div>
-        {icon && <div className={`ml-4 p-3 rounded-full ${highlight ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}>{icon}</div>}
+        {icon && (
+          <div
+            className={`flex-shrink-0 p-3 md:p-3.5 rounded-lg ${highlight ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}`}
+          >
+            {icon}
+          </div>
+        )}
       </div>
     </Card>
   )

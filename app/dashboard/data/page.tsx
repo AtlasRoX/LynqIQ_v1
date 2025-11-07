@@ -4,9 +4,19 @@ import { useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Database, Download, RefreshCw, Package, Users, ShoppingCart, DollarSign } from "lucide-react"
+import {
+  Database,
+  Download,
+  RefreshCw,
+  Package,
+  Users,
+  ShoppingCart,
+  DollarSign,
+  Shield,
+  Clock,
+  ArrowUpRight,
+} from "lucide-react"
 import { ReportGenerator } from "@/components/dashboard/report-generator"
-// IMPORT THE METRICS FUNCTION AND TYPES
 import { calculateMetrics } from "@/lib/analytics-utils"
 import type { Product, Customer, Sale, Cost, DashboardMetrics } from "@/lib/types"
 
@@ -39,12 +49,13 @@ export default function DataPage() {
         if (user) {
           setEmail(user.email || "")
 
-          const [{ data: productsData }, { data: customersData }, { data: salesData }, { data: costsData }] = await Promise.all([
-            supabase.from("products").select("*"),
-            supabase.from("customers").select("*"),
-            supabase.from("sales").select("*"),
-            supabase.from("costs").select("*"),
-          ])
+          const [{ data: productsData }, { data: customersData }, { data: salesData }, { data: costsData }] =
+            await Promise.all([
+              supabase.from("products").select("*"),
+              supabase.from("customers").select("*"),
+              supabase.from("sales").select("*"),
+              supabase.from("costs").select("*"),
+            ])
 
           setProducts(productsData || [])
           setCustomers(customersData || [])
@@ -70,7 +81,6 @@ export default function DataPage() {
 
   const handleRefresh = async () => {
     setRefreshing(true)
-    // Simulate refresh
     await new Promise((resolve) => setTimeout(resolve, 1000))
     setRefreshing(false)
   }
@@ -116,198 +126,265 @@ export default function DataPage() {
     }
   }
 
-  // --- ADDED THIS SECTION ---
-  // Define the variables needed by ReportGenerator
   const timeFrame = "All Time"
-  // Calculate metrics only when not loading
-  const metrics = loading ? {} as DashboardMetrics : calculateMetrics(sales, costs, products, customers)
-  // --- END OF ADDED SECTION ---
+  const metrics = loading ? ({} as DashboardMetrics) : calculateMetrics(sales, costs, products, customers)
 
   return (
-    <div className="p-6 space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-accent/10 rounded-lg">
-              <Database className="h-6 w-6 text-accent" />
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-secondary/5 p-4 sm:p-6 lg:p-8">
+      <div className="max-w-7xl mx-auto space-y-8">
+        <div className="space-y-4 sm:space-y-2">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-center gap-3 sm:gap-4">
+              <div className="p-3 bg-gradient-to-br from-primary/10 to-primary/5 rounded-xl border border-primary/10 backdrop-blur-sm">
+                <Database className="h-6 w-6 sm:h-7 sm:w-7 text-primary" />
+              </div>
+              <div>
+                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground text-balance">
+                  Data Management
+                </h1>
+                <p className="text-sm sm:text-base text-muted-foreground mt-1">
+                  View, export, and manage your business data
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-3xl font-bold text-foreground">Data Management</h1>
-              <p className="text-muted-foreground">View and export your business data</p>
-            </div>
+            <Button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              variant="outline"
+              className="gap-2 w-full sm:w-auto bg-transparent"
+            >
+              <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+              {refreshing ? "Refreshing..." : "Refresh"}
+            </Button>
           </div>
-          <Button onClick={handleRefresh} disabled={refreshing} variant="outline" className="gap-2 bg-transparent">
-            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-            {refreshing ? "Refreshing..." : "Refresh"}
-          </Button>
         </div>
 
         {loading ? (
-          <div className="text-center py-12 text-muted-foreground">Loading data...</div>
+          <div className="text-center py-12 sm:py-16">
+            <div className="inline-flex items-center justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary border-t-transparent"></div>
+              <span className="ml-3 text-muted-foreground">Loading data...</span>
+            </div>
+          </div>
         ) : (
-          <div className="space-y-6">
-            {/* Statistics */}
-            <div className="grid gap-4 md:grid-cols-4">
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Products</p>
-                      <p className="text-2xl font-bold">{stats.products}</p>
+          <div className="space-y-8">
+            <div className="space-y-4">
+              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Quick Overview</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <Card className="border border-border/50 hover:border-primary/30 transition-all hover:shadow-lg hover:shadow-primary/5">
+                  <CardContent className="pt-6">
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-2 flex-1">
+                        <p className="text-xs sm:text-sm text-muted-foreground font-medium">Products</p>
+                        <p className="text-2xl sm:text-3xl font-bold text-foreground">{stats.products}</p>
+                      </div>
+                      <div className="p-2 bg-primary/10 rounded-lg">
+                        <Package className="h-5 w-5 text-primary" />
+                      </div>
                     </div>
-                    <Package className="h-8 w-8 text-accent opacity-50" />
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Customers</p>
-                      <p className="text-2xl font-bold">{stats.customers}</p>
+                  </CardContent>
+                </Card>
+
+                <Card className="border border-border/50 hover:border-primary/30 transition-all hover:shadow-lg hover:shadow-primary/5">
+                  <CardContent className="pt-6">
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-2 flex-1">
+                        <p className="text-xs sm:text-sm text-muted-foreground font-medium">Customers</p>
+                        <p className="text-2xl sm:text-3xl font-bold text-foreground">{stats.customers}</p>
+                      </div>
+                      <div className="p-2 bg-primary/10 rounded-lg">
+                        <Users className="h-5 w-5 text-primary" />
+                      </div>
                     </div>
-                    <Users className="h-8 w-8 text-accent opacity-50" />
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Sales</p>
-                      <p className="text-2xl font-bold">{stats.sales}</p>
+                  </CardContent>
+                </Card>
+
+                <Card className="border border-border/50 hover:border-primary/30 transition-all hover:shadow-lg hover:shadow-primary/5">
+                  <CardContent className="pt-6">
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-2 flex-1">
+                        <p className="text-xs sm:text-sm text-muted-foreground font-medium">Sales Orders</p>
+                        <p className="text-2xl sm:text-3xl font-bold text-foreground">{stats.sales}</p>
+                      </div>
+                      <div className="p-2 bg-primary/10 rounded-lg">
+                        <ShoppingCart className="h-5 w-5 text-primary" />
+                      </div>
                     </div>
-                    <ShoppingCart className="h-8 w-8 text-accent opacity-50" />
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Costs</p>
-                      <p className="text-2xl font-bold">{stats.costs}</p>
+                  </CardContent>
+                </Card>
+
+                <Card className="border border-border/50 hover:border-primary/30 transition-all hover:shadow-lg hover:shadow-primary/5">
+                  <CardContent className="pt-6">
+                    <div className="flex items-start justify-between">
+                      <div className="space-y-2 flex-1">
+                        <p className="text-xs sm:text-sm text-muted-foreground font-medium">Costs</p>
+                        <p className="text-2xl sm:text-3xl font-bold text-foreground">{stats.costs}</p>
+                      </div>
+                      <div className="p-2 bg-primary/10 rounded-lg">
+                        <DollarSign className="h-5 w-5 text-primary" />
+                      </div>
                     </div>
-                    <DollarSign className="h-8 w-8 text-accent opacity-50" />
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
 
-            {/* Export Options */}
             <div className="space-y-4">
-              <h2 className="text-lg font-semibold">Export Data</h2>
-              <div className="grid gap-4 md:grid-cols-2">
-                <Card>
-                  <CardHeader>
+              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Export Your Data</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <Card className="flex flex-col border border-border/50 hover:border-primary/20 transition-all">
+                  <CardHeader className="pb-3">
                     <CardTitle className="text-base flex items-center gap-2">
-                      <Package className="h-5 w-5" />
+                      <Package className="h-4 w-4 text-primary" />
                       Products
                     </CardTitle>
-                    <CardDescription>{stats.products} items</CardDescription>
+                    <CardDescription className="text-xs">{stats.products} items</CardDescription>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="flex-1 flex flex-col justify-end">
                     <Button
                       onClick={() => handleExport("products")}
-                      variant="outline"
-                      className="gap-2 w-full"
                       disabled={stats.products === 0}
+                      className="w-full gap-2"
+                      size="sm"
                     >
-                      <Download className="h-4 w-4" />
-                      Export as JSON
+                      <Download className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">Export as JSON</span>
+                      <span className="sm:hidden">Export</span>
                     </Button>
                   </CardContent>
                 </Card>
-                <Card>
-                  <CardHeader>
+
+                <Card className="flex flex-col border border-border/50 hover:border-primary/20 transition-all">
+                  <CardHeader className="pb-3">
                     <CardTitle className="text-base flex items-center gap-2">
-                      <Users className="h-5 w-5" />
+                      <Users className="h-4 w-4 text-primary" />
                       Customers
                     </CardTitle>
-                    <CardDescription>{stats.customers} records</CardDescription>
+                    <CardDescription className="text-xs">{stats.customers} records</CardDescription>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="flex-1 flex flex-col justify-end">
                     <Button
                       onClick={() => handleExport("customers")}
-                      variant="outline"
-                      className="gap-2 w-full"
                       disabled={stats.customers === 0}
+                      className="w-full gap-2"
+                      size="sm"
                     >
-                      <Download className="h-4 w-4" />
-                      Export as JSON
+                      <Download className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">Export as JSON</span>
+                      <span className="sm:hidden">Export</span>
                     </Button>
                   </CardContent>
                 </Card>
-                <Card>
-                  <CardHeader>
+
+                <Card className="flex flex-col border border-border/50 hover:border-primary/20 transition-all">
+                  <CardHeader className="pb-3">
                     <CardTitle className="text-base flex items-center gap-2">
-                      <ShoppingCart className="h-5 w-5" />
+                      <ShoppingCart className="h-4 w-4 text-primary" />
                       Sales Orders
                     </CardTitle>
-                    <CardDescription>{stats.sales} transactions</CardDescription>
+                    <CardDescription className="text-xs">{stats.sales} transactions</CardDescription>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="flex-1 flex flex-col justify-end">
                     <Button
                       onClick={() => handleExport("sales")}
-                      variant="outline"
-                      className="gap-2 w-full"
                       disabled={stats.sales === 0}
+                      className="w-full gap-2"
+                      size="sm"
                     >
-                      <Download className="h-4 w-4" />
-                      Export as JSON
+                      <Download className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">Export as JSON</span>
+                      <span className="sm:hidden">Export</span>
                     </Button>
                   </CardContent>
                 </Card>
-                <Card>
-                  <CardHeader>
+
+                <Card className="flex flex-col border border-border/50 hover:border-primary/20 transition-all">
+                  <CardHeader className="pb-3">
                     <CardTitle className="text-base flex items-center gap-2">
-                      <DollarSign className="h-5 w-5" />
-                      Costs & Expenses
+                      <DollarSign className="h-4 w-4 text-primary" />
+                      Costs
                     </CardTitle>
-                    <CardDescription>{stats.costs} entries</CardDescription>
+                    <CardDescription className="text-xs">{stats.costs} entries</CardDescription>
                   </CardHeader>
-                  <CardContent>
+                  <CardContent className="flex-1 flex flex-col justify-end">
                     <Button
                       onClick={() => handleExport("costs")}
-                      variant="outline"
-                      className="gap-2 w-full"
                       disabled={stats.costs === 0}
+                      className="w-full gap-2"
+                      size="sm"
                     >
-                      <Download className="h-4 w-4" />
-                      Export as JSON
+                      <Download className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">Export as JSON</span>
+                      <span className="sm:hidden">Export</span>
                     </Button>
                   </CardContent>
                 </Card>
               </div>
             </div>
 
-            {/* Business Report */}
             <div className="space-y-4">
-              <h2 className="text-lg font-semibold">Business Report</h2>
-              {/* UPDATED THIS COMPONENT */}
-              <ReportGenerator
-                timeFrame={timeFrame}
-                sales={sales}
-                costs={costs}
-                products={products}
-                customers={customers}
-                metrics={metrics}
-              />
+              <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Generate Reports</h2>
+              <Card className="border border-border/50">
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <ArrowUpRight className="h-5 w-5 text-primary" />
+                    Premium Business Report
+                  </CardTitle>
+                  <CardDescription>
+                    Generate comprehensive multi-page PDF reports with AI-powered insights and recommendations
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ReportGenerator
+                    timeFrame={timeFrame}
+                    sales={sales}
+                    costs={costs}
+                    products={products}
+                    customers={customers}
+                    metrics={metrics}
+                    businessName="LynqIQ Analytics"
+                  />
+                </CardContent>
+              </Card>
             </div>
 
-            {/* Data Info */}
-            <Card className="bg-muted/50">
-              <CardHeader>
-                <CardTitle className="text-base">Data Storage Information</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm text-muted-foreground">
-                <p>Your data is securely stored in our cloud database and automatically backed up.</p>
-                <p>You can export your data at any time in JSON format for backup or migration purposes.</p>
-                <p>All data is encrypted and protected with industry-standard security measures.</p>
-              </CardContent>
-            </Card>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Card className="border border-border/50 bg-gradient-to-br from-primary/5 to-transparent">
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Shield className="h-5 w-5 text-primary" />
+                    Data Security
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm text-muted-foreground">
+                  <p>
+                    Your data is encrypted with enterprise-grade security protocols and automatically backed up daily.
+                  </p>
+                  <p>
+                    All data transfers use HTTPS/SSL encryption and are protected with industry-standard security
+                    measures.
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="border border-border/50 bg-gradient-to-br from-primary/5 to-transparent">
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Clock className="h-5 w-5 text-primary" />
+                    Last Updated
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="text-sm text-muted-foreground">
+                  <p>
+                    Data refreshed: <span className="text-foreground font-medium">{new Date().toLocaleString()}</span>
+                  </p>
+                  <p className="mt-2">You can manually refresh data using the refresh button at the top.</p>
+                </CardContent>
+              </Card>
+            </div>
           </div>
         )}
+      </div>
     </div>
   )
 }
