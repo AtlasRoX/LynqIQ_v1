@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS products (
   category TEXT NOT NULL,
   cost_price DECIMAL(12, 2) NOT NULL,
   sell_price DECIMAL(12, 2) NOT NULL,
+  stock_quantity INT DEFAULT 0,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );

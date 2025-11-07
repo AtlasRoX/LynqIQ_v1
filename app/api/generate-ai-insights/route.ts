@@ -1,10 +1,11 @@
-import { NextResponse } from "next/server";
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { NextResponse } from 'next/server'
+import { GoogleGenerativeAI } from '@google/generative-ai'
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+// This will now correctly load from your .env.local file after a server restart
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || '')
 
 export async function POST(request: Request) {
-  const { sales, costs, products, customers, metrics } = await request.json();
+  const { sales, costs, products, customers, metrics } = await request.json()
 
   const prompt = `
     You are an expert business analyst. Analyze the following business data and provide a concise, professional executive summary.
@@ -21,25 +22,25 @@ export async function POST(request: Request) {
     3.  Conclude with a key actionable recommendation.
     
     Speak in a professional, direct, and analytical tone. Do not use markdown, backticks, or any formatting. Just return the raw text summary.
-  `;
+  `
 
   try {
-    // --- THIS IS THE FIX ---
-    // Updated the model name from "gemini-pro" to the latest stable version.
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro-latest" });
-    // --- END OF FIX ---
-    
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const text = await response.text();
+    // This model will be found and authenticated correctly
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' })
 
-    return NextResponse.json({ insights: text });
-    
+    const result = await model.generateContent(prompt)
+    const response = await result.response
+    const text = await response.text()
+
+    return NextResponse.json({ insights: text })
   } catch (error: any) {
-    console.error("Error generating AI insights:", error.message);
+    console.error('Error generating AI insights:', error.message)
     return NextResponse.json(
-      { error: "Failed to generate AI insights from model", details: error.message || "Unknown server error" },
-      { status: 500 }
-    );
+      {
+        error: 'Failed to generate AI insights from model',
+        details: error.message || 'Unknown server error',
+      },
+      { status: 500 },
+    )
   }
 }

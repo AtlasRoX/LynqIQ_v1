@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Loader2, Zap, TrendingUp, AlertTriangle, Lightbulb, Target, CheckCircle, Sparkles } from "lucide-react"
+// --- IMPORT THE LOCAL FUNCTION ---
 import { generateLocalAIInsights } from "@/lib/ai-insights-local"
 import { detectAnomalies, analyzeTrends } from "@/lib/heuristic-analytics"
 import type { DashboardMetrics, Sale, Cost, Product, Customer, AIInsight } from "@/lib/types"
@@ -27,31 +28,28 @@ export function AICoach({ metrics, sales, costs, products, customers }: AICoachP
   const generateAnalysis = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch("/api/generate-ai-insights", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ sales, costs, products, customers, metrics }),
-      });
-      const data = await response.json();
-      setInsights(data.insights || []);
+      // --- REPLACED FETCH WITH LOCAL FUNCTIONS ---
+      const localInsights = generateLocalAIInsights(sales, costs, products, customers);
+      setInsights(localInsights || []);
+      
       const newAnomalies = detectAnomalies(sales, costs, products, customers, metrics)
       const newTrends = analyzeTrends(sales, costs, products, customers)
       setAnomalies(newAnomalies || []);
       setTrends(newTrends || []);
+      // --- END OF REPLACEMENT ---
+
     } catch (error) {
-      console.error("Error generating AI insights:", error);
+      console.error("Error generating local insights:", error);
     } finally {
       setLoading(false);
     }
-  }, [sales, costs, products, customers, metrics]);
+  }, [sales, costs, products, customers, metrics]); // metrics was missing from dependency array
 
   useEffect(() => {
     if (metrics) {
       generateAnalysis()
     }
-  }, [generateAnalysis, metrics])
+  }, [generateAnalysis, metrics]) // metrics was already here, which is correct
 
   if (!metrics) {
     return (
@@ -205,7 +203,7 @@ export function AICoach({ metrics, sales, costs, products, customers }: AICoachP
 
             {insights.map((insight, idx) => (
               <div key={idx} className={`p-4 rounded-lg border ${impactColor(insight.impact)} flex gap-3`}>
-                <div className="flex-shrink-0 pt-0.5">{getInsightIcon(insight.category)}</div>
+                <div className="shrink-0 pt-0.5">{getInsightIcon(insight.category)}</div>
                 <div className="flex-1">
                   <p className="font-semibold text-sm">{insight.title}</p>
                   <p className="text-sm text-foreground/70 mt-1">{insight.description}</p>
@@ -232,7 +230,7 @@ export function AICoach({ metrics, sales, costs, products, customers }: AICoachP
 
             {anomalies.map((alert) => (
               <div key={alert.id} className={`p-4 rounded-lg border ${anomalyColor(alert.type)} flex gap-3`}>
-                <div className="flex-shrink-0 pt-0.5">
+                <div className="shrink-0 pt-0.5">
                   {alert.type === "high" ? (
                     <AlertTriangle className="h-5 w-5 text-red-600" />
                   ) : alert.type === "medium" ? (

@@ -4,10 +4,14 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { FileText, Download, Loader2, Sparkles, AlertTriangle } from "lucide-react"
 import { useState } from "react"
-import type { Sale, Cost, Product, Customer, DashboardMetrics } from "@/lib/types"
+import type { Sale, Cost, Product, Customer, DashboardMetrics, AIInsight } from "@/lib/types" // Import AIInsight
 import jsPDF from "jspdf"
 import autoTable from "jspdf-autotable"
-import { Textarea } from "@/components/ui/textarea" // Import Textarea
+import { Textarea } from "@/components/ui/textarea"
+// --- Using the local insights function to avoid API errors ---
+import { generateLocalAIInsights } from "@/lib/ai-insights-local"
+// We need this for the full metrics type, but it's not directly in this file
+// import { calculateMetrics } from "@/lib/analytics-utils" 
 
 interface ReportGeneratorProps {
   timeFrame: string
@@ -16,6 +20,8 @@ interface ReportGeneratorProps {
   products: Product[]
   customers: Customer[]
   metrics: DashboardMetrics
+  // --- NEW: Added businessName prop ---
+  businessName: string
 }
 
 // --- Casting metrics to 'any' to access all properties from analytics-utils ---
@@ -25,17 +31,27 @@ type Metrics = DashboardMetrics & {
   worstSellingProducts?: Product[]
   salesByCategory?: Record<string, number>
   salesByChannel?: Record<string, number>
+  profitPerCategory?: Record<string, number> // Added for more detail
 }
 
-export function ReportGenerator({ timeFrame, sales, costs, products, customers, metrics: rawMetrics }: ReportGeneratorProps) {
+export function ReportGenerator({ 
+  timeFrame, 
+  sales, 
+  costs, 
+  products, 
+  customers, 
+  metrics: rawMetrics,
+  // --- NEW: Destructure businessName ---
+  businessName 
+}: ReportGeneratorProps) {
   const [pdfLoading, setPdfLoading] = useState(false)
   const [summaryLoading, setSummaryLoading] = useState(false)
   const [aiSummary, setAiSummary] = useState("")
   const [aiError, setAiError] = useState("")
   
-  const metrics = rawMetrics as Metrics // Cast to our extended type
+  const metrics = rawMetrics as Metrics
 
-  // --- HELPER: Formats to Taka, but uses 'en' logic for consistency ---
+  // --- HELPER: Formats to Taka (BDT) ---
   const formatTaka = (amount: number) => {
     if (typeof amount !== 'number' || isNaN(amount)) {
       amount = 0;
@@ -46,305 +62,513 @@ export function ReportGenerator({ timeFrame, sales, costs, products, customers, 
       minimumFractionDigits: 0,
     }).format(amount)
   }
+  
+  // --- HELPER: Formats a number with commas ---
+  const formatNum = (num: number) => {
+    if (typeof num !== 'number' || isNaN(num)) {
+      num = 0;
+    }
+    return new Intl.NumberFormat("en-US").format(num);
+  }
 
-  // --- NEW: Step 1 - Generate AI Summary ---
+  // --- Step 1: Generate Local Summary ---
   const handleGenerateSummary = async () => {
     setSummaryLoading(true)
     setAiError("")
     setAiSummary("")
     try {
-      const response = await fetch("/api/generate-ai-insights", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ metrics, sales, costs, products, customers }),
-      })
-
-      // Try to get JSON regardless of status, as errors are also JSON
-      const data = await response.json()
-
-      if (!response.ok) {
-        // If response is not OK, throw an error using the server's message
-        throw new Error(data.details || data.error || "Failed to get AI insights. The server responded with an error.")
-      }
+      const localInsights: AIInsight[] = generateLocalAIInsights(sales, costs, products, customers);
       
-      if (!data.insights) {
-        throw new Error("No insights were returned from the AI.")
+      if (!localInsights || localInsights.length === 0) {
+        throw new Error("No local insights could be generated. Check your data.");
       }
 
-      setAiSummary(data.insights)
+      // Format the insights into a readable string for the textarea
+      const summaryText = localInsights
+        .map(insight => `[${insight.impact.toUpperCase()} ${insight.category.toUpperCase()}] ${insight.title}:\n${insight.description}`)
+        .join("\n\n");
+
+      setAiSummary(summaryText);
 
     } catch (error: any) {
-      console.error("Error generating AI summary:", error)
-      // The error.message will now be the detailed one from the server
+      console.error("Error generating local summary:", error)
       setAiError(error.message) 
     } finally {
       setSummaryLoading(false)
     }
   }
   
-  // --- NEW: Step 2 - Generate Premium PDF ---
+  // --- Step 2: Generate Premium PDF ---
   const generatePDF = () => {
     setPdfLoading(true)
     try {
       const doc = new jsPDF()
       const pageHeight = doc.internal.pageSize.height
       const pageWidth = doc.internal.pageSize.width
-      const pageMargin = 18 // Standard margin
+      const pageMargin = 20 // Use 20mm margins
       let cursor = 0
 
-      // --- PREMIUM DESIGN CONSTANTS ---
-      const COLOR_PRIMARY = "#004A4E" // Dark Teal
-      const COLOR_ACCENT = "#D4AF37" // Muted Gold
-      const COLOR_TEXT_DARK = "#222222"
-      const COLOR_TEXT_LIGHT = "#555555"
-      const COLOR_BACKGROUND = "#F8F8F8"
-      const FONT_HEADING = "Helvetica"
-      const FONT_BODY = "Times-Roman"
+      // --- Design Constants ---
+      const COLOR_PRIMARY = "#198754" // Brand Primary (from globals.css)
+      const COLOR_TEXT = "#222222"
+      const COLOR_SUBTEXT = "#666666"
+      const COLOR_BACKGROUND = "#F8F9FA" // Light Gray (from globals.css)
+      const COLOR_BORDER = "#DEE2E6"
+      const FONT_BODY = "Helvetica" // Use built-in sans-serif
+      const FONT_BOLD = "Helvetica-Bold"
 
-      // --- HELPER: Draws a header on each page ---
-      const addPageHeader = (title: string) => {
-        doc.setFont(FONT_HEADING, "normal")
-        doc.setFontSize(9)
-        doc.setTextColor(COLOR_TEXT_LIGHT)
-        doc.text("LynqIQ Premium Business Report", pageMargin, pageMargin)
-        doc.text(title, pageWidth - pageMargin, pageMargin, { align: "right" })
-        doc.setDrawColor(COLOR_ACCENT)
-        doc.setLineWidth(0.5)
-        doc.line(pageMargin, pageMargin + 4, pageWidth - pageMargin, pageMargin + 4)
-        cursor = pageMargin + 20 // Set cursor below header
-      }
-
-      // --- HELPER: Draws a footer on each page ---
-      const addPageFooter = () => {
-        const pageCount = (doc.internal.pages.length - 1).toString()
-        for (let i = 1; i <= parseInt(pageCount, 10); i++) {
-          doc.setPage(i)
-          doc.setFont(FONT_BODY, "normal")
-          doc.setFontSize(9)
-          doc.setTextColor(COLOR_TEXT_LIGHT)
-          doc.text(
-            `Page ${i} of ${pageCount}`,
-            pageWidth - pageMargin,
-            pageHeight - 15,
-            { align: "right" }
-          )
-          doc.text(
-            `© ${new Date().getFullYear()} LynqIQ & team Algoverse`,
+      // --- Helper: Add Footer & Page Number ---
+      const addPageFooter = (docInstance: jsPDF) => {
+        const pageCount = (docInstance.internal as any).pages.length - 1;
+        for (let i = 1; i <= pageCount; i++) {
+          docInstance.setPage(i);
+          // Skip footer on cover page
+          if (i === 1) continue; 
+          
+          docInstance.setFont(FONT_BODY, "normal");
+          docInstance.setFontSize(9);
+          docInstance.setTextColor(COLOR_SUBTEXT);
+          
+          const footerY = pageHeight - 15;
+          docInstance.setDrawColor(COLOR_BORDER);
+          docInstance.line(pageMargin, footerY - 5, pageWidth - pageMargin, footerY - 5);
+          
+          docInstance.text(
+            "Generated by LynqIQ – The SME Business Intelligence Suite",
             pageMargin,
-            pageHeight - 15
-          )
+            footerY
+          );
+          docInstance.text(
+            `© ${new Date().getFullYear()} LynqIQ. All Rights Reserved. | Page ${i} of ${pageCount}`,
+            pageWidth - pageMargin,
+            footerY,
+            { align: "right" }
+          );
         }
-      }
+      };
+
+      // --- Helper: Add Section Header ---
+      const addSectionHeader = (title: string, y: number) => {
+        doc.setFont(FONT_BOLD, "normal");
+        doc.setFontSize(16);
+        doc.setTextColor(COLOR_TEXT);
+        doc.text(title, pageMargin, y);
+        doc.setDrawColor(COLOR_PRIMARY);
+        doc.setLineWidth(0.5);
+        doc.line(pageMargin, y + 2, pageWidth - pageMargin, y + 2);
+        return y + 10;
+      };
+
+      // --- Helper: Check for page break ---
+      const checkPageBreak = (currentCursor: number, requiredHeight: number) => {
+        if (currentCursor + requiredHeight > pageHeight - 30) {
+          doc.addPage();
+          cursor = pageMargin + 10; // Reset cursor for new page
+          return cursor;
+        }
+        return currentCursor;
+      };
+
+      // === 1. COVER PAGE =============================================
+      doc.setFillColor(COLOR_BACKGROUND);
+      doc.rect(0, 0, pageWidth, pageHeight, "F");
+
+      doc.setFont(FONT_BOLD, "normal");
+      doc.setFontSize(20);
+      doc.setTextColor(COLOR_PRIMARY);
+      doc.text("LynqIQ", pageMargin, 40);
+
+      doc.setFont(FONT_BOLD, "normal");
+      doc.setFontSize(24);
+      doc.setTextColor(COLOR_TEXT);
+      doc.text("BUSINESS PERFORMANCE REPORT", pageWidth / 2, 120, { align: "center" });
+
+      doc.setFont(FONT_BODY, "normal");
+      doc.setFontSize(12);
+      doc.setTextColor(COLOR_SUBTEXT);
+      const metaY = pageHeight - 60;
       
-      // --- HELPER: Draws a "Stat Box" ---
-      const drawStatBox = (x: number, y: number, w: number, title: string, value: string) => {
-        doc.setFillColor(COLOR_BACKGROUND)
-        doc.setDrawColor(COLOR_PRIMARY)
-        doc.setLineWidth(0.2)
-        doc.roundedRect(x, y, w, 28, 3, 3, "FD")
-        
-        doc.setFont(FONT_BODY, "normal")
-        doc.setFontSize(10)
-        doc.setTextColor(COLOR_TEXT_LIGHT)
-        doc.text(title, x + 5, y + 10)
-
-        doc.setFont(FONT_HEADING, "bold")
-        doc.setFontSize(18)
-        doc.setTextColor(COLOR_PRIMARY)
-        doc.text(value, x + 5, y + 20)
-      }
+      // --- FIX 1: Use businessName prop ---
+      doc.text(businessName || "Your Business", pageWidth - pageMargin, metaY, { align: "right" });
       
-      // --- ENGLISH DATE ---
-      const reportDate = new Date().toLocaleDateString("en-US", {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric'
-      })
-
-      // --- 1. TITLE PAGE (PREMIUM DESIGN) ---
-      doc.setFillColor(COLOR_PRIMARY)
-      doc.rect(0, 0, pageWidth / 2.8, pageHeight, "F") // Dark sidebar
-
-      doc.setFont(FONT_HEADING, "bold")
-      doc.setFontSize(40)
-      doc.setTextColor("#FFFFFF")
-      doc.text("LynqIQ", 25, 120)
-
-      doc.setFont(FONT_HEADING, "normal")
-      doc.setFontSize(12)
-      doc.setTextColor("#FFFFFF")
-      doc.text("Intelligent Business Management", 25, 130)
-
-      const titleX = (pageWidth / 2.8) + 20
-      doc.setFont(FONT_HEADING, "normal")
-      doc.setFontSize(28)
-      doc.setTextColor(COLOR_TEXT_DARK)
-      doc.text("Business Performance", titleX, 120)
-      doc.text("Report", titleX, 132)
-
-      doc.setFont(FONT_BODY, "normal")
-      doc.setFontSize(12)
-      doc.setTextColor(COLOR_TEXT_LIGHT)
-      doc.text(`Report Period: ${timeFrame}`, titleX, 150)
-      doc.text(`Generated: ${reportDate}`, titleX, 157)
-      
-      doc.setFont(FONT_BODY, "italic")
-      doc.setFontSize(12)
-      doc.setTextColor(COLOR_TEXT_DARK)
-      doc.text("Prepared by team Algoverse", titleX, 164)
-
-      // --- 2. AI-GENERATED EXECUTIVE SUMMARY ---
-      doc.addPage()
-      addPageHeader("Executive Summary")
-      
-      doc.setFont(FONT_HEADING, "bold")
-      doc.setFontSize(12)
-      doc.setTextColor(COLOR_PRIMARY)
-      doc.text("AI-Generated Summary", pageMargin, cursor)
-      cursor += 8
-      
-      doc.setFont(FONT_BODY, "normal")
-      doc.setFontSize(11)
-      doc.setTextColor(COLOR_TEXT_DARK)
-      const summaryLines = doc.splitTextToSize(aiSummary, pageWidth - (pageMargin * 2))
-      doc.text(summaryLines, pageMargin, cursor)
-      cursor += summaryLines.length * 5 + 10 // Add spacing
-
-      // --- 3. KEY METRICS (Stat Box Dashboard) ---
-      doc.addPage()
-      addPageHeader("Financial Snapshot")
-
-      const boxW = (pageWidth - (pageMargin * 2) - 10) / 2 // 2 boxes per row
-      drawStatBox(pageMargin, cursor, boxW, "Total Revenue", formatTaka(metrics.totalRevenue))
-      drawStatBox(pageMargin + boxW + 10, cursor, boxW, "Net Profit", formatTaka(metrics.netProfit))
-      cursor += 38
-      drawStatBox(pageMargin, cursor, boxW, "Profit Margin", `${(metrics.profitMargin || 0).toFixed(1)}%`)
-      drawStatBox(pageMargin + boxW + 10, cursor, boxW, "Total Expenses", formatTaka(metrics.totalExpenses))
-      cursor += 38
-      drawStatBox(pageMargin, cursor, boxW, "Customer Lifetime Value (CLV)", formatTaka(metrics.clv))
-      drawStatBox(pageMargin + boxW + 10, cursor, boxW, "Customer Acquisition Cost (CAC)", formatTaka(metrics.cac))
-      cursor += 38
-      drawStatBox(pageMargin, cursor, boxW, "Business Health Score", `${metrics.healthScore || 0}/100`)
-      drawStatBox(pageMargin + boxW + 10, cursor, boxW, "Retention Rate", `${(metrics.retentionRate || 0).toFixed(1)}%`)
+      doc.text(`Report Period: ${timeFrame}`, pageWidth - pageMargin, metaY + 7, { align: "right" });
+      doc.text(`Generated On: ${new Date().toLocaleString('en-US')}`, pageWidth - pageMargin, metaY + 14, { align: "right" });
+      doc.text("Generated By: LynqIQ System", pageWidth - pageMargin, metaY + 21, { align: "right" });
 
 
-      // --- 4. TOP CUSTOMERS TABLE ---
-      doc.addPage()
-      addPageHeader("Customer & Product Insights")
+      // === 2. EXECUTIVE SUMMARY ======================================
+      doc.addPage();
+      cursor = pageMargin + 10;
+      cursor = addSectionHeader("EXECUTIVE SUMMARY", cursor);
 
-      doc.setFont(FONT_HEADING, "bold")
-      doc.setFontSize(14)
-      doc.setTextColor(COLOR_TEXT_DARK)
-      doc.text("Top 10 Customers by Revenue", pageMargin, cursor)
-      cursor += 8
+      const execMetrics = [
+        ["Total Revenue", formatTaka(metrics.totalRevenue)],
+        ["Total Costs", formatTaka(metrics.totalExpenses)],
+        ["Profit", formatTaka(metrics.netProfit)],
+        ["Profit Margin", `${metrics.profitMargin.toFixed(1)}%`],
+        ["ROI", `${metrics.roi.toFixed(1)}%`],
+        ["Health Score", `${metrics.healthScore}/100`],
+      ];
 
       autoTable(doc, {
         startY: cursor,
-        head: [["Rank", "Customer Name", "Total Spent", "Total Orders"]],
-        body: (metrics.topCustomers || []).slice(0, 10).map((c: any, idx: number) => [
-          idx + 1,
-          c.name,
-          formatTaka(c.total_spent),
-          c.total_orders,
-        ]),
-        theme: "striped",
-        headStyles: { fillColor: COLOR_PRIMARY, textColor: "#FFFFFF" },
-        didDrawPage: (data) => { if (data.cursor) cursor = data.cursor.y }
-      })
+        body: execMetrics,
+        theme: 'plain',
+        styles: { font: FONT_BODY, fontSize: 11 },
+        columnStyles: {
+          0: { font: FONT_BOLD, cellWidth: 50 },
+          1: { halign: 'right', font: FONT_BODY }
+        },
+        didDrawPage: (data) => { cursor = data.cursor?.y || cursor; }
+      });
+      
+      cursor += 5;
+      
+      // Mini Bar Chart
+      doc.setFont(FONT_BODY, "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(COLOR_SUBTEXT);
+      doc.text("Profit vs. Cost", pageMargin, cursor);
+      cursor += 5;
+      const chartMax = Math.max(metrics.netProfit, metrics.totalExpenses, 1);
+      const chartWidth = pageWidth - pageMargin * 2;
+      
+      // Cost Bar
+      doc.setFillColor(COLOR_SUBTEXT);
+      doc.rect(pageMargin, cursor, (metrics.totalExpenses / chartMax) * chartWidth, 10, "F");
+      doc.text("Cost", pageMargin + 2, cursor + 7);
+      cursor += 12;
+      
+      // Profit Bar
+      doc.setFillColor(COLOR_PRIMARY);
+      doc.rect(pageMargin, cursor, (metrics.netProfit / chartMax) * chartWidth, 10, "F");
+      doc.text("Profit", pageMargin + 2, cursor + 7);
+      cursor += 20;
+      
 
-      // --- 5. TOP PRODUCTS TABLE ---
-      cursor += 15
-      doc.setFont(FONT_HEADING, "bold")
-      doc.setFontSize(14)
-      doc.setTextColor(COLOR_TEXT_DARK)
-      doc.text("Top 5 Profitable Products", pageMargin, cursor)
-      cursor += 8
+      // === 3. FINANCIAL OVERVIEW =====================================
+      cursor = checkPageBreak(cursor, 120);
+      cursor = addSectionHeader("FINANCIAL OVERVIEW", cursor);
+
+      // --- Data Prep: Revenue Breakdown ---
+      const totalRevenue = metrics.totalRevenue || 1; // Avoid divide by zero
+      const revenueData = Object.entries(metrics.salesByChannel || {}).map(([source, amount]) => [
+        source,
+        formatTaka(amount),
+        `${((amount / totalRevenue) * 100).toFixed(1)}%`
+      ]);
+      
+      doc.setFont(FONT_BOLD, "normal");
+      doc.setFontSize(12);
+      doc.text("a) Revenue Breakdown by Channel", pageMargin, cursor);
+      cursor += 6;
 
       autoTable(doc, {
         startY: cursor,
-        head: [["Product Name", "Total Profit"]],
-        body: (metrics.profitPerProduct || []).slice(0, 5).map((p: any) => [
+        head: [["Source", "Amount", "% of Total"]],
+        body: revenueData,
+        theme: 'striped',
+        headStyles: { fillColor: COLOR_PRIMARY },
+        didDrawPage: (data) => { cursor = data.cursor?.y || cursor; }
+      });
+      cursor += 10;
+      
+      // --- Data Prep: Expense Breakdown ---
+      cursor = checkPageBreak(cursor, 100);
+      const totalExpenses = metrics.totalExpenses || 1;
+      const costByCategory = costs.reduce((acc, cost) => {
+        acc[cost.category] = (acc[cost.category] || 0) + cost.amount;
+        return acc;
+      }, {} as Record<string, number>);
+      
+      const expenseData = Object.entries(costByCategory).map(([category, amount]) => [
+        category,
+        formatTaka(amount),
+        `${((amount / totalExpenses) * 100).toFixed(1)}%`
+      ]);
+
+      doc.setFont(FONT_BOLD, "normal");
+      doc.setFontSize(12);
+      doc.text("b) Expense Breakdown by Category", pageMargin, cursor);
+      cursor += 6;
+      
+      autoTable(doc, {
+        startY: cursor,
+        head: [["Category", "Amount", "% of Total"]],
+        body: expenseData,
+        theme: 'striped',
+        headStyles: { fillColor: COLOR_PRIMARY },
+        didDrawPage: (data) => { cursor = data.cursor?.y || cursor; }
+      });
+      cursor += 10;
+
+
+      // === 4. CUSTOMER INSIGHTS ======================================
+      doc.addPage();
+      cursor = pageMargin + 10;
+      cursor = addSectionHeader("CUSTOMER INSIGHTS", cursor);
+
+      const returningCustomers = customers.filter(c => c.total_orders > 1).length;
+      const customerMetrics = [
+        ["Total Customers", formatNum(metrics.totalCustomers)],
+        ["Returning Customers", `${formatNum(returningCustomers)} (${(metrics.retentionRate || 0).toFixed(1)}%)`],
+        ["Average Order Value (AOV)", formatTaka(metrics.aov)],
+        ["Top 3 Customers", metrics.topCustomers.slice(0, 3).map(c => c.name).join(', ') || 'N/A']
+      ];
+      
+      autoTable(doc, {
+        startY: cursor,
+        head: [["Metric", "Value"]],
+        body: customerMetrics,
+        theme: 'striped',
+        headStyles: { fillColor: COLOR_PRIMARY },
+        didDrawPage: (data) => { cursor = data.cursor?.y || cursor; }
+      });
+      cursor += 10;
+
+      // --- Customer Pie Chart (Replaced with text legend to fix 'arc' error) ---
+      doc.setFont(FONT_BOLD, "normal");
+      doc.setFontSize(12);
+      doc.text("New vs. Returning Customers", pageMargin, cursor);
+      cursor += 8; // Add space
+      
+      const newCustomers = metrics.totalCustomers - returningCustomers;
+      
+      if (metrics.totalCustomers > 0) {
+        doc.setFontSize(10);
+        doc.setFillColor(COLOR_BORDER);
+        doc.rect(pageMargin, cursor, 3, 3, "F");
+        doc.text(`New Customers: ${formatNum(newCustomers)}`, pageMargin + 5, cursor + 2.5);
+        cursor += 7;
+        doc.setFillColor(COLOR_PRIMARY);
+        doc.rect(pageMargin, cursor, 3, 3, "F");
+        doc.text(`Returning Customers: ${formatNum(returningCustomers)}`, pageMargin + 5, cursor + 2.5);
+      } else {
+        doc.setFontSize(10);
+        doc.setTextColor(COLOR_SUBTEXT);
+        doc.text("No customer data for chart.", pageMargin, cursor);
+      }
+      cursor += 10;
+
+
+      // === 5. PRODUCT PERFORMANCE =====================================
+      doc.addPage();
+      cursor = pageMargin + 10;
+      cursor = addSectionHeader("PRODUCT PERFORMANCE", cursor);
+      
+      const productPerformance = products.map(p => {
+        const pSales = sales.filter(s => s.product_id === p.id && s.status === 'completed');
+        const unitsSold = pSales.reduce((sum, s) => sum + s.quantity, 0);
+        const revenue = pSales.reduce((sum, s) => sum + s.total_amount, 0);
+        const cost = unitsSold * p.cost_price;
+        const profit = revenue - cost;
+        const margin = revenue > 0 ? (profit / revenue) * 100 : 0;
+        return { name: p.name, unitsSold, revenue, cost, profit, margin };
+      }).sort((a, b) => b.revenue - a.revenue);
+      
+      autoTable(doc, {
+        startY: cursor,
+        head: [["Product", "Units Sold", "Revenue", "Cost", "Profit", "Margin"]],
+        body: productPerformance.map(p => [
           p.name,
-          formatTaka(p.profit)
+          formatNum(p.unitsSold),
+          formatTaka(p.revenue),
+          formatTaka(p.cost),
+          formatTaka(p.profit),
+          `${p.margin.toFixed(1)}%`
         ]),
-        theme: "striped",
-        headStyles: { fillColor: COLOR_PRIMARY, textColor: "#FFFFFF" },
-        didDrawPage: (data) => { if (data.cursor) cursor = data.cursor.y }
-      })
-
-      // --- 6. SALES BY CATEGORY (Simulated Bar Chart) ---
-      doc.addPage()
-      addPageHeader("Sales Breakdown")
-
-      doc.setFont(FONT_HEADING, "bold")
-      doc.setFontSize(14)
-      doc.setTextColor(COLOR_TEXT_DARK)
-      doc.text("Sales by Category", pageMargin, cursor)
-      cursor += 10
+        theme: 'striped',
+        headStyles: { fillColor: COLOR_PRIMARY },
+        didDrawPage: (data) => { cursor = data.cursor?.y || cursor; }
+      });
+      cursor += 10;
       
-      const categoryData = Object.entries(metrics.salesByCategory || {}).sort(([, a], [, b]) => (b as number) - (a as number))
-      const maxCategoryValue = Math.max(...categoryData.map(([, v]) => v as number))
-      const chartWidth = pageWidth - (pageMargin * 2) - 50 // Width of the chart area
+      // Top 5 Products Bar Chart
+      // --- FIX: This check ensures the chart doesn't split awkwardly ---
+      // (The original code was correct, this just confirms it)
+      // Required height: 12 (title) + 8 (padding) + (5 items * 12 height) = 80.
+      cursor = checkPageBreak(cursor, 100); 
       
-      doc.setFont(FONT_BODY, "normal")
-      doc.setFontSize(10)
+      doc.setFont(FONT_BOLD, "normal");
+      doc.setFontSize(12);
+      doc.text("Top 5 Products by Revenue", pageMargin, cursor);
+      cursor += 8;
       
-      for (const [name, value] of categoryData) {
-        if (cursor > pageHeight - 40) { // Check for page break
-          doc.addPage()
-          addPageHeader("Sales Breakdown (cont.)")
-        }
-        const barWidth = (value as number / maxCategoryValue) * chartWidth
-        doc.setTextColor(COLOR_TEXT_DARK)
-        doc.text(name, pageMargin, cursor + 6)
+      const top5Products = productPerformance.slice(0, 5);
+      const maxRevenue = Math.max(...top5Products.map(p => p.revenue), 1);
+      const productChartWidth = (pageWidth - pageMargin * 2) - 120;
+      
+      for (const product of top5Products) {
+        const barWidth = (product.revenue / maxRevenue) * productChartWidth;
+        doc.setFontSize(9);
+        doc.setTextColor(COLOR_TEXT);
+        doc.text(product.name, pageMargin, cursor + 5.5, { maxWidth: 70 });
         
-        // Draw the bar
-        doc.setFillColor(COLOR_ACCENT)
-        doc.rect(pageMargin + 50, cursor, barWidth, 8, "F")
+        doc.setFillColor(COLOR_BORDER);
+        doc.roundedRect(pageMargin + 75, cursor, productChartWidth, 8, 3, 3, "F");
+        doc.setFillColor(COLOR_PRIMARY);
+        doc.roundedRect(pageMargin + 75, cursor, barWidth, 8, 3, 3, "F");
         
-        doc.setTextColor(COLOR_TEXT_LIGHT)
-        doc.text(formatTaka(value as number), pageMargin + 55 + barWidth, cursor + 6)
+        doc.setTextColor(COLOR_SUBTEXT);
+        doc.text(formatTaka(product.revenue), pageMargin + 75 + barWidth + 5, cursor + 5.5);
         
-        cursor += 15
+        cursor += 12;
       }
+      cursor += 10;
+      
 
-      // --- 7. KEY RECOMMENDATIONS ---
-      doc.addPage()
-      addPageHeader("Key Recommendations")
+      // === 7. PERFORMANCE DASHBOARD (Skipping 6, already done) ======
+      cursor = checkPageBreak(cursor, 100);
+      cursor = addSectionHeader("PERFORMANCE DASHBOARD", cursor);
       
-      const recommendations = generateRecommendations(metrics, sales, costs, products, customers)
+      // --- FIX 2: Replaced emojis with text for "Status" ---
+      const kpiData = [
+        ["Revenue Growth", "N/A", "N/A", "N/A"], // Growth is hard to calculate without context
+        ["Customer Retention", `${metrics.retentionRate.toFixed(1)}%`, "85%", metrics.retentionRate > 85 ? "Good" : "Warning"],
+        ["ROI", `${metrics.roi.toFixed(1)}%`, "100%", metrics.roi > 100 ? "Good" : (metrics.roi > 0 ? "Warning" : "Poor")],
+        ["Avg. Order Value", formatTaka(metrics.aov), "N/A", "N/A"]
+      ];
+
+      autoTable(doc, {
+        startY: cursor,
+        head: [["KPI", "Current", "Target", "Status"]],
+        body: kpiData,
+        theme: 'grid',
+        headStyles: { fillColor: COLOR_PRIMARY },
+        didDrawPage: (data) => { cursor = data.cursor?.y || cursor; }
+      });
+      cursor += 10;
       
-      for (const rec of recommendations) {
-        if (cursor > pageHeight - 40) { // Check for page break
-          doc.addPage()
-          addPageHeader("Key Recommendations (cont.)")
-        }
+
+      // === 8. MONTHLY OVERVIEW =======================================
+      doc.addPage();
+      cursor = pageMargin + 10;
+      cursor = addSectionHeader("MONTHLY OVERVIEW", cursor);
+
+      // --- Monthly Data Prep ---
+      const monthlyAgg: Record<string, { revenue: number, cost: number, profit: number }> = {};
+      sales.forEach(s => {
+        if (s.status !== 'completed') return;
+        const month = s.date.slice(0, 7); // YYYY-MM
+        if (!monthlyAgg[month]) monthlyAgg[month] = { revenue: 0, cost: 0, profit: 0 };
+        monthlyAgg[month].revenue += s.total_amount;
+        const product = products.find(p => p.id === s.product_id);
+        const costOfSale = product ? product.cost_price * s.quantity : 0;
+        monthlyAgg[month].cost += costOfSale;
+      });
+      costs.forEach(c => {
+        const month = c.date.slice(0, 7);
+        if (!monthlyAgg[month]) monthlyAgg[month] = { revenue: 0, cost: 0, profit: 0 };
+        monthlyAgg[month].cost += c.amount;
+      });
+
+      let lastMonthProfit = 0;
+      const monthlyTableData = Object.keys(monthlyAgg).sort().map(month => {
+        const data = monthlyAgg[month];
+        data.profit = data.revenue - data.cost;
+        const growth = lastMonthProfit !== 0 ? ((data.profit - lastMonthProfit) / Math.abs(lastMonthProfit)) * 100 : 0;
+        lastMonthProfit = data.profit;
+        return [month, formatTaka(data.revenue), formatTaka(data.cost), formatTaka(data.profit), `${growth.toFixed(1)}%`];
+      });
+
+      autoTable(doc, {
+        startY: cursor,
+        head: [["Month", "Revenue", "Cost", "Profit", "Growth %"]],
+        body: monthlyTableData,
+        theme: 'striped',
+        headStyles: { fillColor: COLOR_PRIMARY },
+        didDrawPage: (data) => { cursor = data.cursor?.y || cursor; }
+      });
+      cursor += 10;
+
+
+      // === 9. INSIGHTS & RECOMMENDATIONS =============================
+      cursor = checkPageBreak(cursor, 120);
+      cursor = addSectionHeader("INSIGHTS & RECOMMENDATIONS", cursor);
+      
+      const localInsights = generateLocalAIInsights(sales, costs, products, customers);
+      doc.setFont(FONT_BODY, "normal");
+      doc.setFontSize(10);
+      
+      for (const insight of localInsights.slice(0, 5)) { // Show top 5
         
-        doc.setFont(FONT_HEADING, "bold")
-        doc.setFontSize(14)
-        doc.setTextColor(COLOR_PRIMARY)
-        doc.text("•", pageMargin, cursor)
+        // --- FIX 3: Replaced emojis with text ---
+        const icon = insight.category === 'risk' ? '(Risk)' : (insight.category === 'opportunity' ? '(Opportunity)' : '(Info)');
+        const title = `${icon} [${insight.impact.toUpperCase()}] ${insight.title}`;
+        const desc = insight.description;
+
+        // --- FIX 3: Calculate full height *before* checking page break ---
+        doc.setFont(FONT_BODY, "normal");
+        doc.setFontSize(10);
+        const splitDesc = doc.splitTextToSize(desc, pageWidth - pageMargin * 2 - 5);
+        // 6 (for title) + 5 (padding) + (lines * 5 height per line)
+        const requiredHeight = 6 + 5 + (splitDesc.length * 5); 
+
+        cursor = checkPageBreak(cursor, requiredHeight); // Check for the *entire block*
+
+        // Render Title
+        doc.setFont(FONT_BOLD, "normal");
+        doc.setFontSize(10); // Ensure font size is set
+        doc.setTextColor(COLOR_TEXT);
+        doc.text(title, pageMargin, cursor);
+        cursor += 6;
         
-        doc.setFont(FONT_BODY, "normal")
-        doc.setFontSize(11)
-        doc.setTextColor(COLOR_TEXT_DARK)
-        const splitText = doc.splitTextToSize(rec, pageWidth - pageMargin - pageMargin - 8)
-        doc.text(splitText, pageMargin + 8, cursor)
-        
-        cursor += (splitText.length * 5) + 8 // Add spacing for next bullet
+        // Render Description
+        doc.setFont(FONT_BODY, "normal");
+        doc.setFontSize(10); // Ensure font size is set
+        doc.setTextColor(COLOR_SUBTEXT);
+        doc.text(splitDesc, pageMargin + 5, cursor);
+        cursor += splitDesc.length * 5 + 5; // Add padding *after*
+      }
+      
+
+      // === 10. CONCLUSION ============================================
+      // --- Check for page break before starting conclusion ---
+      cursor = checkPageBreak(cursor, 100); 
+      // Note: If insights section is long, this might be on a new page already.
+      // If the *last* insight block caused a page break, we need to add a header.
+      // This is complex. Let's assume `addSectionHeader` is on a new page if needed.
+      
+      doc.addPage(); // Force conclusion to a new page for clean layout
+      cursor = pageMargin + 10;
+      cursor = addSectionHeader("CONCLUSION", cursor);
+
+      const overallPerformance = metrics.healthScore > 75 ? 'Good' : metrics.healthScore > 50 ? 'Moderate' : 'Poor';
+      const topInsight = localInsights[0] || { title: "N/A", description: "Review overall business goals." };
+      
+      doc.setFont(FONT_BODY, "normal");
+      doc.setFontSize(11);
+      doc.text(`• Overall business performance: ${overallPerformance}`, pageMargin, cursor);
+      cursor += 7;
+      doc.text(`• Key focus area for next quarter: ${topInsight.title}`, pageMargin, cursor);
+      cursor += 7;
+      doc.text("• Recommended actions:", pageMargin, cursor);
+      cursor += 7;
+
+      doc.setFont(FONT_BODY, "normal");
+      doc.setTextColor(COLOR_SUBTEXT);
+      const recommendations = localInsights.map(ins => ins.description);
+      for (let i = 0; i < 3 && i < recommendations.length; i++) {
+        const splitRec = doc.splitTextToSize(`   ${i + 1}. ${recommendations[i]}`, pageWidth - pageMargin * 2 - 5);
+        cursor = checkPageBreak(cursor, (splitRec.length * 5) + 2); // Check for each recommendation
+        doc.text(splitRec, pageMargin, cursor);
+        cursor += (splitRec.length * 5) + 2;
       }
 
       // --- FINAL STEP: ADD FOOTERS & SAVE ---
-      addPageFooter()
-      doc.save(`LynqIQ_Premium_Report_${new Date().toISOString().split('T')[0]}.pdf`)
+      addPageFooter(doc);
+      doc.save(`LynqIQ_Report_${new Date().toISOString().split('T')[0]}.pdf`)
 
-    } catch (error) {
-      console.error("Error generating PDF:", error)
-      alert("Failed to generate report. Please try again.")
+    // --- FIX: Corrected catch block syntax ---
+    } catch (err: any) {
+      console.error("Error generating PDF:", err)
+      // --- FIX: Use aiError to display the error, not the 'error' variable ---
+      setAiError(`Failed to generate report: ${err.message}`)
     } finally {
       setPdfLoading(false)
     }
   }
+
 
   return (
     <Card className="w-full max-w-lg">
@@ -352,17 +576,17 @@ export function ReportGenerator({ timeFrame, sales, costs, products, customers, 
         <div className="flex items-center gap-3">
             <FileText className="h-6 w-6 text-primary" />
             <div>
-              <CardTitle>Premium AI Report</CardTitle>
-              <CardDescription>Generate a multi-page PDF with AI-powered insights</CardDescription>
+              <CardTitle>Premium Business Report</CardTitle>
+              <CardDescription>Generate a multi-page PDF with business insights</CardDescription>
             </div>
           </div>
       </CardHeader>
       <CardContent className="space-y-6">
         {/* --- STEP 1: AI SUMMARY --- */}
         <div className="space-y-3">
-          <label className="font-semibold text-sm">Step 1: Generate AI Summary</label>
+          <label className="font-semibold text-sm">Step 1: Generate Summary</label>
           <p className="text-sm text-muted-foreground">
-            Click to generate an AI-powered executive summary based on your current data.
+            Click to generate an executive summary based on your current data.
           </p>
           <Button onClick={handleGenerateSummary} disabled={summaryLoading} className="w-full gap-2">
             {summaryLoading ? (
@@ -373,7 +597,7 @@ export function ReportGenerator({ timeFrame, sales, costs, products, customers, 
             ) : (
               <>
                 <Sparkles className="h-4 w-4" />
-                Generate AI Summary
+                Generate Summary
               </>
             )}
           </Button>
@@ -381,7 +605,6 @@ export function ReportGenerator({ timeFrame, sales, costs, products, customers, 
           {aiError && (
             <div className="p-3 rounded-md bg-destructive/10 text-destructive text-sm flex items-center gap-2">
               <AlertTriangle className="h-4 w-4" />
-              {/* This will now show the detailed server error */}
               <p className="break-all">{aiError}</p>
             </div>
           )}
@@ -391,7 +614,7 @@ export function ReportGenerator({ timeFrame, sales, costs, products, customers, 
               className="mt-2 h-36"
               value={aiSummary}
               readOnly
-              placeholder="AI Summary will appear here..."
+              placeholder="Summary will appear here..."
             />
           )}
         </div>
@@ -426,7 +649,7 @@ export function ReportGenerator({ timeFrame, sales, costs, products, customers, 
   )
 }
 
-// We need this function here, as the API route is gone.
+// --- This is the local function used instead of the API ---
 function generateRecommendations(
   metrics: DashboardMetrics,
   sales: Sale[],
@@ -470,7 +693,8 @@ function generateRecommendations(
   const totalCustomers = customers.length
   if (totalCustomers > 0) {
       const repeatCustomers = customers.filter((c: Customer) => c.total_orders > 1).length
-      const retentionRate = repeatCustomers / totalCustomers
+      // FIX: Avoid division by zero if totalCustomers is 0
+      const retentionRate = totalCustomers > 0 ? (repeatCustomers / totalCustomers) : 0;
       if (retentionRate < 0.3) {
           recommendations.push("Low customer retention rate. Implement loyalty programs and improve customer experience.")
       } else if (retentionRate > 0.6) {
@@ -491,11 +715,6 @@ function generateRecommendations(
     recommendations.push(
       `Review pricing strategy for ${lowMarginProducts.length} low-margin products. Consider price increases or bundling.`,
     )
-  }
-
-  // Growth recommendation
-  if (recommendations.length < 5) {
-    recommendations.push("Monitor market trends and consider product diversification for sustainable growth.")
   }
   
   if (recommendations.length === 0) {

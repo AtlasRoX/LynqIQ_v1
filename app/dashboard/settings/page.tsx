@@ -7,16 +7,20 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { LogOut, Settings, Bell, Lock, Database, Download, Copy, CheckCircle } from "lucide-react"
+import { LogOut, Settings, Bell, Lock, Database, Download, Copy, CheckCircle, Briefcase, Loader2 } from "lucide-react"
 import { useRouter } from "next/navigation"
+// You might want to add a toast component for notifications
+// import { useToast } from "@/components/ui/use-toast" 
 
 export default function SettingsPage() {
   const router = useRouter()
+  // const { toast } = useToast() // Uncomment if you have a toast component
   const [email, setEmail] = useState("")
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [copied, setCopied] = useState(false)
   const [settings, setSettings] = useState({
+    businessName: "Your Business",
     notificationsEnabled: true,
     emailAlerts: true,
     darkMode: true,
@@ -24,15 +28,46 @@ export default function SettingsPage() {
   })
 
   useEffect(() => {
-    const getUser = async () => {
+    const getUserAndSettings = async () => {
       const supabase = await createClient()
       const {
         data: { user },
       } = await supabase.auth.getUser()
-      setEmail(user?.email || "")
+      
+      if (user) {
+        setEmail(user.email || "")
+
+        // --- FETCH SETTINGS FROM PROFILES TABLE ---
+        try {
+          const { data: profile, error } = await supabase
+            .from('profiles')
+            .select('*') // Select all settings
+            .eq('user_id', user.id)
+            .single()
+
+          if (error && error.code !== 'PGRST116') { // PGRST116 = 'no rows found'
+            throw error
+          }
+          
+          if (profile) {
+            setSettings(prev => ({
+              ...prev,
+              businessName: profile.business_name || "Your Business",
+              notificationsEnabled: profile.notifications_enabled ?? true,
+              emailAlerts: profile.email_alerts ?? true,
+              darkMode: profile.dark_mode ?? true,
+              autoBackup: profile.auto_backup ?? true,
+            }))
+          }
+        } catch (error: any) {
+          // This is where your console error was triggered
+          console.error("Error fetching settings:", error.message) 
+          // toast({ title: "Error", description: "Could not load your settings." })
+        }
+      }
       setLoading(false)
     }
-    getUser()
+    getUserAndSettings()
   }, [])
 
   const handleLogout = async () => {
@@ -41,17 +76,54 @@ export default function SettingsPage() {
     router.push("/auth/login")
   }
 
-  const handleSettingChange = (key: string) => {
+  // Handle switch toggles
+  const handleSwitchChange = (key: keyof typeof settings) => {
     setSettings((prev) => ({
       ...prev,
       [key]: !prev[key as keyof typeof prev],
     }))
   }
 
+  // Handle text input changes
+  const handleInputChange = (key: keyof typeof settings, value: string) => {
+    setSettings(prev => ({
+      ...prev,
+      [key]: value,
+    }))
+  }
+
   const handleSaveSettings = async () => {
     setSaving(true)
-    // Simulate saving
-    await new Promise((resolve) => setTimeout(resolve, 500))
+    const supabase = await createClient()
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (user) {
+      try {
+        // --- SAVE SETTINGS TO PROFILES TABLE ---
+        const { error } = await supabase
+          .from("profiles")
+          .update({
+            business_name: settings.businessName,
+            notifications_enabled: settings.notificationsEnabled,
+            email_alerts: settings.emailAlerts,
+            dark_mode: settings.darkMode,
+            auto_backup: settings.autoBackup,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("user_id", user.id)
+
+        if (error) throw error
+        
+        // toast({ title: "Success", description: "Settings saved successfully!" })
+        
+      } catch (error: any) {
+        console.error("Error saving settings:", error)
+        // toast({ title: "Error", description: "Failed to save settings." })
+      }
+    }
     setSaving(false)
   }
 
@@ -63,8 +135,8 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-        <div className="p-6">
-          <p className="text-muted-foreground">Loading settings...</p>
+        <div className="p-6 max-w-2xl mx-auto flex justify-center items-center">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
     )
   }
@@ -73,14 +145,39 @@ export default function SettingsPage() {
     <div className="p-6 max-w-2xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-center gap-3 mb-8">
-          <div className="p-2 bg-accent/10 rounded-lg">
-            <Settings className="h-6 w-6 text-accent" />
+          <div className="p-2 bg-primary/10 rounded-lg">
+            <Settings className="h-6 w-6 text-primary" />
           </div>
           <div>
             <h1 className="text-3xl font-bold text-foreground">Settings</h1>
             <p className="text-muted-foreground">Manage your account and preferences</p>
           </div>
         </div>
+
+        {/* --- Business Profile Section --- */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Briefcase className="h-5 w-5" />
+              Business Profile
+            </CardTitle>
+            <CardDescription>Your business information</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="businessName">Business Name</Label>
+              <Input 
+                id="businessName"
+                value={settings.businessName} 
+                onChange={(e) => handleInputChange("businessName", e.target.value)}
+                placeholder="e.g., Acme Widgets"
+              />
+              <p className="text-xs text-muted-foreground">
+                This name will appear on your PDF reports.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Account Section */}
         <Card>
@@ -100,14 +197,14 @@ export default function SettingsPage() {
                   size="icon"
                   variant="outline"
                   onClick={copyToClipboard}
-                  className="flex-shrink-0 bg-transparent"
+                  className="shrink-0"
                 >
                   {copied ? <CheckCircle className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4" />}
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">Your primary account email</p>
             </div>
-            <Button onClick={handleLogout} variant="outline" className="gap-2 bg-transparent">
+            <Button onClick={handleLogout} variant="outline" className="gap-2">
               <LogOut className="h-4 w-4" />
               Logout
             </Button>
@@ -131,7 +228,7 @@ export default function SettingsPage() {
               </div>
               <Switch
                 checked={settings.notificationsEnabled}
-                onCheckedChange={() => handleSettingChange("notificationsEnabled")}
+                onCheckedChange={() => handleSwitchChange("notificationsEnabled")}
               />
             </div>
             <div className="flex items-center justify-between">
@@ -139,7 +236,10 @@ export default function SettingsPage() {
                 <Label>Email Alerts</Label>
                 <p className="text-sm text-muted-foreground">Receive critical alerts via email</p>
               </div>
-              <Switch checked={settings.emailAlerts} onCheckedChange={() => handleSettingChange("emailAlerts")} />
+              <Switch 
+                checked={settings.emailAlerts} 
+                onCheckedChange={() => handleSwitchChange("emailAlerts")} 
+              />
             </div>
           </CardContent>
         </Card>
@@ -154,21 +254,24 @@ export default function SettingsPage() {
             <CardDescription>Manage your business data</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="p-4 bg-muted/50 rounded-lg border border-border">
+            <div className="p-4 bg-muted/50 rounded-lg border">
               <p className="text-sm font-semibold mb-2">Database Backup</p>
               <p className="text-sm text-muted-foreground mb-4">
                 Download a complete backup of your business data including sales, customers, and costs.
               </p>
-              <Button variant="outline" className="gap-2 bg-transparent">
+              <Button variant="outline" className="gap-2">
                 <Download className="h-4 w-4" />
                 Export Data
               </Button>
             </div>
-            <div className="p-4 bg-muted/50 rounded-lg border border-border">
+            <div className="p-4 bg-muted/50 rounded-lg border">
               <p className="text-sm font-semibold mb-2">Auto-Backup</p>
               <div className="flex items-center justify-between">
                 <p className="text-sm text-muted-foreground">Automatically backup your data daily</p>
-                <Switch checked={settings.autoBackup} onCheckedChange={() => handleSettingChange("autoBackup")} />
+                <Switch 
+                  checked={settings.autoBackup} 
+                  onCheckedChange={() => handleSwitchChange("autoBackup")} 
+                />
               </div>
             </div>
           </CardContent>
@@ -186,15 +289,18 @@ export default function SettingsPage() {
                 <Label>Dark Mode</Label>
                 <p className="text-sm text-muted-foreground">Use dark theme by default</p>
               </div>
-              <Switch checked={settings.darkMode} onCheckedChange={() => handleSettingChange("darkMode")} />
+              <Switch 
+                checked={settings.darkMode} 
+                onCheckedChange={() => handleSwitchChange("darkMode")} 
+              />
             </div>
           </CardContent>
         </Card>
 
         {/* Danger Zone */}
-        <Card className="border-red-500/20 bg-red-500/5">
+        <Card className="border-destructive/50 bg-destructive/5">
           <CardHeader>
-            <CardTitle className="text-red-600">Danger Zone</CardTitle>
+            <CardTitle className="text-destructive">Danger Zone</CardTitle>
             <CardDescription>Irreversible actions</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -208,8 +314,15 @@ export default function SettingsPage() {
         </Card>
 
         {/* Save Button */}
-        <Button onClick={handleSaveSettings} disabled={saving} className="w-full">
-          {saving ? "Saving..." : "Save Settings"}
+        <Button onClick={handleSaveSettings} disabled={saving || loading} className="w-full">
+          {saving ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Saving...
+            </>
+          ) : (
+            "Save Settings"
+          )}
         </Button>
       </div>
   )
