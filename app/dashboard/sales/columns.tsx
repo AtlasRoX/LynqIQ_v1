@@ -1,6 +1,8 @@
 "use client"
 
 import { formatCurrency, formatDate } from "@/lib/utils"
+import { Product, Customer, Sale } from "@/lib/types"
+import { ColumnDef } from "@tanstack/react-table"
 
 interface SalesColumnsProps {
   products: Product[];

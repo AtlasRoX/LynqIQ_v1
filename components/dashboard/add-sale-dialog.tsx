@@ -74,7 +74,7 @@ export function AddSaleDialog({ products, customers }: AddSaleDialogProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button className="gap-2" id={id}>
+        <Button className="gap-2" id={id ?? undefined}>
           <Plus className="h-4 w-4" />
           Add Sale
         </Button>
