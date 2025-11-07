@@ -8,9 +8,11 @@ import { SalesByCategoryChart } from "@/components/dashboard/sales-by-category-c
 import { SalesByChannelChart } from "@/components/dashboard/sales-by-channel-chart"
 import { TopCustomersList } from "@/components/dashboard/top-customers-list"
 import { WorstSellingProductsList } from "@/components/dashboard/worst-selling-products-list"
+import { DateFilter } from "@/components/dashboard/date-filter"
 
-export default async function Overview() {
-  const timeFrame: string = "30d"
+export default async function Overview({ searchParams }: { searchParams: { timeFrame: string } }) {
+  const resolvedSearchParams = searchParams
+  const timeFrame = resolvedSearchParams.timeFrame || "lifetime"
 
   const cookieStore = cookies()
   const supabase = createClient(cookieStore)
@@ -95,9 +97,14 @@ export default async function Overview() {
     <main className="min-h-screen bg-background">
       <div className="px-4 py-6 md:px-6 lg:px-8 space-y-8">
         {/* Header Section */}
-        <div className="space-y-2">
-          <h1 className="text-3xl md:text-4xl font-bold text-foreground text-pretty">Business Overview</h1>
-          <p className="text-muted-foreground text-base md:text-lg">Last 30 days performance metrics</p>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <h1 className="text-3xl md:text-4xl font-bold text-foreground text-pretty">Business Overview</h1>
+            <p className="text-muted-foreground text-base md:text-lg">
+              {timeFrame === "lifetime" ? "All-time" : timeFrame} performance metrics
+            </p>
+          </div>
+          <DateFilter />
         </div>
 
         {/* Key Metrics Grid - Financial Overview */}

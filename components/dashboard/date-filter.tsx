@@ -19,7 +19,7 @@ const timeFrameOptions: { label: string; value: TimeFrame }[] = [
 export function DateFilter() {
   const searchParams = useSearchParams()
   const router = useRouter()
-  const timeFrame = (searchParams.get("timeFrame") || "30d") as TimeFrame
+  const timeFrame = (searchParams.get("timeFrame") || "lifetime") as TimeFrame
 
   const handleTimeFrameChange = (frame: TimeFrame) => {
     const params = new URLSearchParams(searchParams)
