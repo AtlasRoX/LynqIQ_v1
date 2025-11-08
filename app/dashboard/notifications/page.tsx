@@ -12,6 +12,10 @@ import { detectAnomalies } from "@/lib/heuristic-analytics"
 import type { Sale, Cost, Product, Customer, DashboardMetrics } from "@/lib/types"
 import type { AnomalyAlert } from "@/lib/heuristic-analytics"
 
+type DismissedAlert = {
+  alert_id: string
+}
+
 export default function NotificationsPage() {
   const searchParams = useSearchParams()
   const timeFrame = searchParams.get("timeFrame") || "lifetime"
@@ -31,7 +35,11 @@ export default function NotificationsPage() {
 
   const loadDismissedAlerts = async (supabase: ReturnType<typeof createClient>, uid: string) => {
     try {
-      const { data, error } = await supabase.from("dismissed_alerts").select("alert_id").eq("user_id", uid)
+      const { data, error } = await supabase
+        .from("dismissed_alerts")
+        .select("alert_id")
+        .eq("user_id", uid)
+        .returns<DismissedAlert[]>()
 
       if (error) {
         console.error("[v0] Error loading dismissed alerts:", error)
