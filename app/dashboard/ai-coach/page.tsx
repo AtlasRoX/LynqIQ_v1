@@ -5,15 +5,16 @@ import { createClient } from "@/lib/supabase/client"
 import { useSearchParams } from "next/navigation"
 import { DateFilter } from "@/components/dashboard/date-filter"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Loader2, Zap, Lightbulb, TrendingUp, AlertTriangle, CheckCircle, BarChart3 } from "lucide-react"
-import { calculateMetrics } from "@/lib/analytics-utils"
+import { Loader2, Zap, Lightbulb, TrendingUp, AlertTriangle, CheckCircle, BarChart3, Award } from "lucide-react"
+import { calculateMetrics, getHealthScoreInsight } from "@/lib/analytics-utils"
 import { generateLocalAIInsights } from "@/lib/ai-insights-local"
 import { detectAnomalies, analyzeTrends } from "@/lib/heuristic-analytics"
 import type { Sale, Cost, Product, Customer } from "@/lib/types"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 
 export default function AICoachPage() {
   const searchParams = useSearchParams()
-  const timeFrame = searchParams.get("timeFrame") || "30d"
+  const timeFrame = searchParams.get("timeFrame") || "lifetime"
 
   const [email, setEmail] = useState<string>("")
   const [sales, setSales] = useState<Sale[]>([])
@@ -38,6 +39,8 @@ export default function AICoachPage() {
           const endDate = new Date()
           const startDate = new Date()
 
+          const isLifetime = timeFrame === "lifetime"
+
           switch (timeFrame) {
             case "24h":
               startDate.setHours(startDate.getHours() - 24)
@@ -60,6 +63,9 @@ export default function AICoachPage() {
             case "1y":
               startDate.setFullYear(startDate.getFullYear() - 1)
               break
+            case "lifetime":
+              startDate.setFullYear(1900)
+              break
             default:
               startDate.setFullYear(1900)
           }
@@ -67,12 +73,23 @@ export default function AICoachPage() {
           const formattedStartDate = startDate.toISOString().split("T")[0]
           const formattedEndDate = endDate.toISOString().split("T")[0]
 
-          const [{ data: salesData }, { data: costsData }, { data: productsData }, { data: customersData }] = await Promise.all([
-            supabase.from("sales").select("*").gte("date", formattedStartDate).lte("date", formattedEndDate),
-            supabase.from("costs").select("*").gte("date", formattedStartDate).lte("date", formattedEndDate),
-            supabase.from("products").select("*"),
-            supabase.from("customers").select("*"),
-          ])
+          const salesQuery = supabase.from("sales").select("*")
+          if (!isLifetime) {
+            salesQuery.gte("date", formattedStartDate).lte("date", formattedEndDate)
+          }
+
+          const costsQuery = supabase.from("costs").select("*")
+          if (!isLifetime) {
+            costsQuery.gte("date", formattedStartDate).lte("date", formattedEndDate)
+          }
+
+          const [{ data: salesData }, { data: costsData }, { data: productsData }, { data: customersData }] =
+            await Promise.all([
+              salesQuery,
+              costsQuery,
+              supabase.from("products").select("*"),
+              supabase.from("customers").select("*"),
+            ])
 
           setSales(salesData || [])
           setCosts(costsData || [])
@@ -148,14 +165,86 @@ export default function AICoachPage() {
             </Card>
             <Card>
               <CardContent className="pt-6">
-                <div className="text-center">
-                  <BarChart3 className="h-8 w-8 text-primary mx-auto mb-2" />
-                  <p className="text-3xl font-bold">{metrics.healthScore}</p>
-                  <p className="text-sm text-muted-foreground">Health Score</p>
-                </div>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="text-center cursor-help">
+                        <BarChart3 className="h-8 w-8 text-primary mx-auto mb-2" />
+                        <p className="text-3xl font-bold">{metrics.healthScore}</p>
+                        <p className="text-sm text-muted-foreground">Health Score</p>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <p className="font-semibold">Business Health Score</p>
+                      <p className="text-xs mt-1">
+                        Weighted index based on: Profit Margin (40%), Growth Trend (30%), Customer Retention (20%), Cost
+                        Efficiency (10%)
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </CardContent>
             </Card>
           </div>
+
+          {(() => {
+            const healthInsight = getHealthScoreInsight(metrics.healthScore)
+            return (
+              <Card
+                className="border-l-4"
+                style={{
+                  borderLeftColor: healthInsight.color.includes("green")
+                    ? "#16a34a"
+                    : healthInsight.color.includes("blue")
+                      ? "#2563eb"
+                      : healthInsight.color.includes("amber")
+                        ? "#d97706"
+                        : "#dc2626",
+                }}
+              >
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Award className="h-5 w-5" />
+                    Health Score Analysis: <span className={healthInsight.color}>{healthInsight.status}</span>
+                  </CardTitle>
+                  <CardDescription>{healthInsight.description}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div>
+                      <h4 className="font-semibold mb-2 text-sm">Score Breakdown:</h4>
+                      <div className="grid gap-2 text-sm">
+                        <div className="flex justify-between items-center p-2 bg-muted/50 rounded">
+                          <span className="text-muted-foreground">Profit Margin (40%)</span>
+                          <span className="font-medium">{metrics.profitMargin.toFixed(1)}%</span>
+                        </div>
+                        <div className="flex justify-between items-center p-2 bg-muted/50 rounded">
+                          <span className="text-muted-foreground">Growth Trend (30%)</span>
+                          <span className="font-medium">Calculated</span>
+                        </div>
+                        <div className="flex justify-between items-center p-2 bg-muted/50 rounded">
+                          <span className="text-muted-foreground">Customer Retention (20%)</span>
+                          <span className="font-medium">{metrics.retentionRate.toFixed(1)}%</span>
+                        </div>
+                        <div className="flex justify-between items-center p-2 bg-muted/50 rounded">
+                          <span className="text-muted-foreground">Cost Efficiency (10%)</span>
+                          <span className="font-medium">Calculated</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <h4 className="font-semibold mb-2 text-sm">Recommendations:</h4>
+                      <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+                        {healthInsight.recommendations.map((rec, idx) => (
+                          <li key={idx}>{rec}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )
+          })()}
 
           {/* Insights */}
           {insights.length > 0 && (
@@ -189,8 +278,8 @@ export default function AICoachPage() {
                                 insight.impact === "high"
                                   ? "bg-red-500/10 text-red-700"
                                   : insight.impact === "medium"
-                                  ? "bg-amber-500/10 text-amber-700"
-                                  : "bg-blue-500/10 text-blue-700"
+                                    ? "bg-amber-500/10 text-amber-700"
+                                    : "bg-blue-500/10 text-blue-700"
                               }`}
                             >
                               {insight.impact} impact
@@ -225,9 +314,7 @@ export default function AICoachPage() {
                           <p className="font-semibold">{alert.title}</p>
                           <p className="text-sm text-foreground/70 mt-1">{alert.description}</p>
                         </div>
-                        <span className="text-xs font-bold text-red-600 whitespace-nowrap">
-                          {alert.impact}% impact
-                        </span>
+                        <span className="text-xs font-bold text-red-600 whitespace-nowrap">{alert.impact}% impact</span>
                       </div>
                     </div>
                   ))}
@@ -259,7 +346,8 @@ export default function AICoachPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-foreground/70">
-                  AI Coach identifies high-potential products, customer segments, and market gaps to help you grow revenue and market share.
+                  AI Coach identifies high-potential products, customer segments, and market gaps to help you grow
+                  revenue and market share.
                 </p>
               </CardContent>
             </Card>
@@ -271,7 +359,8 @@ export default function AICoachPage() {
               </CardHeader>
               <CardContent>
                 <p className="text-sm text-foreground/70">
-                  Real-time monitoring for unusual patterns, profit anomalies, expense spikes, customer churn, and product underperformance.
+                  Real-time monitoring for unusual patterns, profit anomalies, expense spikes, customer churn, and
+                  product underperformance.
                 </p>
               </CardContent>
             </Card>

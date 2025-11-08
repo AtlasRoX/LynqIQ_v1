@@ -1,6 +1,6 @@
 import { cookies } from "next/headers"
 import { createClient } from "@/lib/supabase/server"
-import { calculateMetrics } from "@/lib/analytics-utils"
+import { calculateMetrics, getHealthScoreInsight } from "@/lib/analytics-utils"
 import { KPICard } from "@/components/dashboard/kpi-card"
 import { formatCurrency } from "@/lib/utils"
 import { DollarSign, TrendingUp, Activity, Users, Package, Award, PieChart, Zap } from "lucide-react"
@@ -9,6 +9,7 @@ import { SalesByChannelChart } from "@/components/dashboard/sales-by-channel-cha
 import { TopCustomersList } from "@/components/dashboard/top-customers-list"
 import { WorstSellingProductsList } from "@/components/dashboard/worst-selling-products-list"
 import { DateFilter } from "@/components/dashboard/date-filter"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 
 export default async function Overview({ searchParams }: { searchParams: { timeFrame: string } }) {
   const resolvedSearchParams = searchParams
@@ -119,6 +120,7 @@ export default async function Overview({ searchParams }: { searchParams: { timeF
               value={formatCurrency(metrics.totalRevenue, "BDT")}
               icon={<DollarSign className="h-6 w-6" />}
               highlight
+              description="Total income from all completed sales"
             />
             <KPICard
               title="Net Profit"
@@ -126,17 +128,20 @@ export default async function Overview({ searchParams }: { searchParams: { timeF
               isPositive={metrics.netProfit >= 0}
               icon={<TrendingUp className="h-6 w-6" />}
               highlight
+              description="Revenue minus all costs and expenses"
             />
             <KPICard
               title="Total Expenses"
               value={formatCurrency(metrics.totalExpenses, "BDT")}
               icon={<Activity className="h-6 w-6" />}
+              description="Sum of all operational costs"
             />
             <KPICard
               title="Gross Profit"
               value={formatCurrency(metrics.grossProfit, "BDT")}
               isPositive={metrics.grossProfit >= 0}
               icon={<DollarSign className="h-6 w-6" />}
+              description="Revenue minus cost of goods sold"
             />
           </div>
         </div>
@@ -155,6 +160,7 @@ export default async function Overview({ searchParams }: { searchParams: { timeF
               isPositive={metrics.profitMargin >= 20}
               icon={<PieChart className="h-6 w-6" />}
               highlight={metrics.profitMargin >= 20}
+              description="Profit as percentage of revenue (40% of health score)"
             />
             <KPICard
               title="ROI"
@@ -162,11 +168,13 @@ export default async function Overview({ searchParams }: { searchParams: { timeF
               unit="%"
               isPositive={metrics.roi >= 0}
               icon={<Zap className="h-6 w-6" />}
+              description="Return on total investment"
             />
             <KPICard
               title="Average Order Value"
               value={formatCurrency(metrics.aov, "BDT")}
               icon={<DollarSign className="h-6 w-6" />}
+              description="Average revenue per completed sale"
             />
             <KPICard
               title="Health Score"
@@ -175,9 +183,69 @@ export default async function Overview({ searchParams }: { searchParams: { timeF
               isPositive={metrics.healthScore >= 50}
               icon={<Award className="h-6 w-6" />}
               highlight={metrics.healthScore >= 75}
+              description="Overall business health based on profit margin, growth, retention, and cost efficiency"
             />
           </div>
         </div>
+
+        {(() => {
+          const healthInsight = getHealthScoreInsight(metrics.healthScore)
+          return (
+            <Card
+              className="border-l-4"
+              style={{
+                borderLeftColor: healthInsight.color.includes("green")
+                  ? "#16a34a"
+                  : healthInsight.color.includes("blue")
+                    ? "#2563eb"
+                    : healthInsight.color.includes("amber")
+                      ? "#d97706"
+                      : "#dc2626",
+              }}
+            >
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Award className="h-5 w-5" />
+                  Health Score Analysis: <span className={healthInsight.color}>{healthInsight.status}</span>
+                </CardTitle>
+                <CardDescription>{healthInsight.description}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="font-semibold mb-2 text-sm">Score Breakdown:</h4>
+                    <div className="grid gap-2 text-sm">
+                      <div className="flex justify-between items-center p-2 bg-muted/50 rounded">
+                        <span className="text-muted-foreground">Profit Margin (40%)</span>
+                        <span className="font-medium">{metrics.profitMargin.toFixed(1)}%</span>
+                      </div>
+                      <div className="flex justify-between items-center p-2 bg-muted/50 rounded">
+                        <span className="text-muted-foreground">Growth Trend (30%)</span>
+                        <span className="font-medium">Calculated</span>
+                      </div>
+                      <div className="flex justify-between items-center p-2 bg-muted/50 rounded">
+                        <span className="text-muted-foreground">Customer Retention (20%)</span>
+                        <span className="font-medium">{metrics.retentionRate.toFixed(1)}%</span>
+                      </div>
+                      <div className="flex justify-between items-center p-2 bg-muted/50 rounded">
+                        <span className="text-muted-foreground">Cost Efficiency (10%)</span>
+                        <span className="font-medium">Calculated</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="font-semibold mb-2 text-sm">Recommendations:</h4>
+                    <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+                      {healthInsight.recommendations.map((rec, idx) => (
+                        <li key={idx}>{rec}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )
+        })()}
 
         {/* Charts Section */}
         <div className="space-y-4">

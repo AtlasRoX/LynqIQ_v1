@@ -69,7 +69,7 @@ export function calculateMetrics(sales: Sale[], costs: Cost[], products: Product
   const salesByChannel = calculateSalesByChannel(sales)
   const topCustomers = getTopCustomers(customers)
   const worstSellingProducts = getWorstSellingProducts(sales, products)
-  
+
   // --- ADDED THIS LINE (it was missing) ---
   const profitPerProduct = calculateProfitPerProduct(sales, products)
 
@@ -127,24 +127,27 @@ export function calculateCustomerSegments(customers: Customer[]) {
     oneTimeBuyers: customers.filter((c) => c.total_orders === 1),
     newCustomers: customers.filter((c) => new Date(c.created_at) > new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)),
     byAge: {
-      '18-25': customers.filter((c) => c.age !== undefined && c.age >= 18 && c.age <= 25),
-      '26-35': customers.filter((c) => c.age !== undefined && c.age >= 26 && c.age <= 35),
-      '36-45': customers.filter((c) => c.age !== undefined && c.age >= 36 && c.age <= 45),
-      '46+': customers.filter((c) => c.age !== undefined && c.age >= 46),
+      "18-25": customers.filter((c) => c.age !== undefined && c.age >= 18 && c.age <= 25),
+      "26-35": customers.filter((c) => c.age !== undefined && c.age >= 26 && c.age <= 35),
+      "36-45": customers.filter((c) => c.age !== undefined && c.age >= 36 && c.age <= 45),
+      "46+": customers.filter((c) => c.age !== undefined && c.age >= 46),
     },
-    byLocation: customers.reduce((acc, c) => {
-      if (c.location) {
-        acc[c.location] = (acc[c.location] || 0) + 1
-      }
-      return acc
-    }, {} as Record<string, number>),
+    byLocation: customers.reduce(
+      (acc, c) => {
+        if (c.location) {
+          acc[c.location] = (acc[c.location] || 0) + 1
+        }
+        return acc
+      },
+      {} as Record<string, number>,
+    ),
   }
   return segments
 }
 
 export function calculateCLV(sales: Sale[], customers: Customer[]) {
-  const completedSales = sales.filter(s => s.status === 'completed');
-  if (completedSales.length === 0 || customers.length === 0) return 0;
+  const completedSales = sales.filter((s) => s.status === "completed")
+  if (completedSales.length === 0 || customers.length === 0) return 0
 
   const aov = completedSales.reduce((sum, s) => sum + s.total_amount, 0) / completedSales.length
   const totalPurchases = customers.reduce((sum, c) => sum + c.total_orders, 0)
@@ -154,20 +157,20 @@ export function calculateCLV(sales: Sale[], customers: Customer[]) {
     .map((c) => {
       const firstOrder = sales.find((s) => s.customer_id === c.id)
       const lastOrderDate = c.last_order_date ? new Date(c.last_order_date) : null
-      
+
       if (firstOrder && lastOrderDate) {
         const firstOrderDate = new Date(firstOrder.date)
-        const lifespanInDays = (lastOrderDate.getTime() - firstOrderDate.getTime()) / (1000 * 3600 * 24);
-        if (lifespanInDays <= 0) return 1 / 365; // Min 1 day lifespan
-        return lifespanInDays / 365; // in years
+        const lifespanInDays = (lastOrderDate.getTime() - firstOrderDate.getTime()) / (1000 * 3600 * 24)
+        if (lifespanInDays <= 0) return 1 / 365 // Min 1 day lifespan
+        return lifespanInDays / 365 // in years
       } else if (firstOrder) {
-        return 1 / 365; // Default to 1 day if only one order
+        return 1 / 365 // Default to 1 day if only one order
       }
       return 0
     })
     .filter((lifespan) => lifespan > 0)
 
-  if (customerLifespans.length === 0) return 0; // No valid lifespans
+  if (customerLifespans.length === 0) return 0 // No valid lifespans
 
   const averageCustomerLifespan = customerLifespans.reduce((sum, l) => sum + l, 0) / customerLifespans.length
 
@@ -177,7 +180,7 @@ export function calculateCLV(sales: Sale[], customers: Customer[]) {
 
 export function calculateCAC(costs: Cost[], customers: Customer[]) {
   const marketingAndSalesCosts = costs
-    .filter((c) => c.category === 'Marketing' || c.category === 'Sales')
+    .filter((c) => c.category === "Marketing" || c.category === "Sales")
     .reduce((sum, c) => sum + c.amount, 0)
 
   const newCustomers = customers.filter(
@@ -193,16 +196,16 @@ export function calculateRetentionRate(sales: Sale[], customers: Customer[]) {
   const sixtyDaysAgo = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000)
 
   const customersAtStartOfPeriod = customers.filter((c) => new Date(c.created_at) < sixtyDaysAgo).length
-  if (customersAtStartOfPeriod === 0) return 0; // Can't retain 0 customers
+  if (customersAtStartOfPeriod === 0) return 0 // Can't retain 0 customers
 
   const customersAtEndOfPeriod = customers.filter((c) => new Date(c.created_at) < thirtyDaysAgo).length
-  
+
   const newCustomersDuringPeriod = customers.filter(
     (c) => new Date(c.created_at) >= sixtyDaysAgo && new Date(c.created_at) < thirtyDaysAgo,
   ).length
 
   const retainedCustomers = customersAtEndOfPeriod - newCustomersDuringPeriod
-  if (retainedCustomers < 0) return 0; // Cannot be negative
+  if (retainedCustomers < 0) return 0 // Cannot be negative
 
   const retentionRate = (retainedCustomers / customersAtStartOfPeriod) * 100
   return isNaN(retentionRate) ? 0 : retentionRate
@@ -212,13 +215,13 @@ export function calculateChurnRate(sales: Sale[], customers: Customer[]) {
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
 
   const customersAtStartOfPeriod = customers.filter((c) => new Date(c.created_at) < thirtyDaysAgo).length
-  if (customersAtStartOfPeriod === 0) return 0;
+  if (customersAtStartOfPeriod === 0) return 0
 
   const churnedCustomers = customers.filter((c) => {
     // If created before the period
     if (new Date(c.created_at) < thirtyDaysAgo) {
       // And has no last order date, or last order was > 30 days ago
-      if (!c.last_order_date) return true 
+      if (!c.last_order_date) return true
       const lastOrderDate = new Date(c.last_order_date)
       return lastOrderDate < thirtyDaysAgo
     }
@@ -230,181 +233,249 @@ export function calculateChurnRate(sales: Sale[], customers: Customer[]) {
 }
 
 export function calculateRevenueGrowthRate(sales: Sale[], timeFrame: string): number {
-  let startDate1: Date, endDate1: Date, startDate2: Date, endDate2: Date;
-  const now = new Date();
+  let startDate1: Date, endDate1: Date, startDate2: Date, endDate2: Date
+  const now = new Date()
 
   switch (timeFrame) {
     case "24h":
-      endDate1 = now;
-      startDate1 = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-      endDate2 = startDate1;
-      startDate2 = new Date(startDate1.getTime() - 24 * 60 * 60 * 1000);
-      break;
+      endDate1 = now
+      startDate1 = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+      endDate2 = startDate1
+      startDate2 = new Date(startDate1.getTime() - 24 * 60 * 60 * 1000)
+      break
     case "3d":
-      endDate1 = now;
-      startDate1 = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
-      endDate2 = startDate1;
-      startDate2 = new Date(startDate1.getTime() - 3 * 24 * 60 * 60 * 1000);
-      break;
+      endDate1 = now
+      startDate1 = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000)
+      endDate2 = startDate1
+      startDate2 = new Date(startDate1.getTime() - 3 * 24 * 60 * 60 * 1000)
+      break
     case "7d":
-      endDate1 = now;
-      startDate1 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      endDate2 = startDate1;
-      startDate2 = new Date(startDate1.getTime() - 7 * 24 * 60 * 60 * 1000);
-      break;
+      endDate1 = now
+      startDate1 = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+      endDate2 = startDate1
+      startDate2 = new Date(startDate1.getTime() - 7 * 24 * 60 * 60 * 1000)
+      break
     case "15d":
-      endDate1 = now;
-      startDate1 = new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000);
-      endDate2 = startDate1;
-      startDate2 = new Date(startDate1.getTime() - 15 * 24 * 60 * 60 * 1000);
-      break;
+      endDate1 = now
+      startDate1 = new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000)
+      endDate2 = startDate1
+      startDate2 = new Date(startDate1.getTime() - 15 * 24 * 60 * 60 * 1000)
+      break
     case "30d":
-      endDate1 = now;
-      startDate1 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      endDate2 = startDate1;
-      startDate2 = new Date(startDate1.getTime() - 30 * 24 * 60 * 60 * 1000);
-      break;
+      endDate1 = now
+      startDate1 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+      endDate2 = startDate1
+      startDate2 = new Date(startDate1.getTime() - 30 * 24 * 60 * 60 * 1000)
+      break
     case "6m":
-      endDate1 = now;
-      startDate1 = new Date(new Date().setMonth(now.getMonth() - 6));
-      endDate2 = startDate1;
-      startDate2 = new Date(new Date().setMonth(new Date().getMonth() - 12));
-      break;
+      endDate1 = now
+      startDate1 = new Date(new Date().setMonth(now.getMonth() - 6))
+      endDate2 = startDate1
+      startDate2 = new Date(new Date().setMonth(new Date().getMonth() - 12))
+      break
     case "1y":
-      endDate1 = now;
-      startDate1 = new Date(new Date().setFullYear(now.getFullYear() - 1));
-      endDate2 = startDate1;
-      startDate2 = new Date(new Date().setFullYear(new Date().getFullYear() - 2));
-      break;
+      endDate1 = now
+      startDate1 = new Date(new Date().setFullYear(now.getFullYear() - 1))
+      endDate2 = startDate1
+      startDate2 = new Date(new Date().setFullYear(new Date().getFullYear() - 2))
+      break
     default:
       // Default to 30d
-      endDate1 = now;
-      startDate1 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      endDate2 = startDate1;
-      startDate2 = new Date(startDate1.getTime() - 30 * 24 * 60 * 60 * 1000);
-      break;
+      endDate1 = now
+      startDate1 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
+      endDate2 = startDate1
+      startDate2 = new Date(startDate1.getTime() - 30 * 24 * 60 * 60 * 1000)
+      break
   }
 
   const recentSales = sales.filter((s) => {
-    const saleDate = new Date(s.date);
-    return saleDate >= startDate1 && saleDate <= endDate1 && s.status === "completed";
-  });
+    const saleDate = new Date(s.date)
+    return saleDate >= startDate1 && saleDate <= endDate1 && s.status === "completed"
+  })
 
   const previousSales = sales.filter((s) => {
-    const saleDate = new Date(s.date);
-    return saleDate >= startDate2 && saleDate < endDate2 && s.status === "completed";
-  });
+    const saleDate = new Date(s.date)
+    return saleDate >= startDate2 && saleDate < endDate2 && s.status === "completed"
+  })
 
-  const recentTotal = recentSales.reduce((sum, s) => sum + s.total_amount, 0);
-  const previousTotal = previousSales.reduce((sum, s) => sum + s.total_amount, 0);
+  const recentTotal = recentSales.reduce((sum, s) => sum + s.total_amount, 0)
+  const previousTotal = previousSales.reduce((sum, s) => sum + s.total_amount, 0)
 
-  if (previousTotal === 0) return recentTotal > 0 ? 100 : 0;
-  return ((recentTotal - previousTotal) / previousTotal) * 100;
+  if (previousTotal === 0) return recentTotal > 0 ? 100 : 0
+  return ((recentTotal - previousTotal) / previousTotal) * 100
 }
 
 export function calculateSalesByCategory(sales: Sale[], products: Product[]) {
-  const salesByCategory: Record<string, number> = {};
+  const salesByCategory: Record<string, number> = {}
   sales.forEach((s) => {
     if (s.status === "completed") {
-      const product = products.find((p) => p.id === s.product_id);
+      const product = products.find((p) => p.id === s.product_id)
       if (product) {
-        salesByCategory[product.category] = (salesByCategory[product.category] || 0) + s.total_amount;
+        salesByCategory[product.category] = (salesByCategory[product.category] || 0) + s.total_amount
       }
     }
-  });
-  return salesByCategory;
+  })
+  return salesByCategory
 }
 
 export function calculateSalesByRegion(sales: Sale[], customers: Customer[]) {
-  const salesByRegion: Record<string, number> = {};
+  const salesByRegion: Record<string, number> = {}
   sales.forEach((s) => {
     if (s.status === "completed") {
-      const customer = customers.find((c) => c.id === s.customer_id);
+      const customer = customers.find((c) => c.id === s.customer_id)
       if (customer && customer.location) {
-        salesByRegion[customer.location] = (salesByRegion[customer.location] || 0) + s.total_amount;
+        salesByRegion[customer.location] = (salesByRegion[customer.location] || 0) + s.total_amount
       }
     }
-  });
-  return salesByRegion;
+  })
+  return salesByRegion
 }
 
 export function calculateTotalUnitsSold(sales: Sale[]): number {
-  return sales
-    .filter((s) => s.status === "completed")
-    .reduce((sum, s) => sum + s.quantity, 0);
+  return sales.filter((s) => s.status === "completed").reduce((sum, s) => sum + s.quantity, 0)
 }
 
 export function calculateProfitPerProduct(sales: Sale[], products: Product[]) {
-  const profitPerProduct: Record<string, { name: string; profit: number }> = {};
+  const profitPerProduct: Record<string, { name: string; profit: number }> = {}
 
   sales.forEach((s) => {
     if (s.status === "completed") {
-      const product = products.find((p) => p.id === s.product_id);
+      const product = products.find((p) => p.id === s.product_id)
       if (product) {
-        const profit = (s.unit_price - product.cost_price) * s.quantity;
+        const profit = (s.unit_price - product.cost_price) * s.quantity
         if (profitPerProduct[product.id]) {
-          profitPerProduct[product.id].profit += profit;
+          profitPerProduct[product.id].profit += profit
         } else {
           profitPerProduct[product.id] = {
             name: product.name,
             profit: profit,
-          };
+          }
         }
       }
     }
-  });
+  })
 
-  return Object.values(profitPerProduct).sort((a, b) => b.profit - a.profit);
+  return Object.values(profitPerProduct).sort((a, b) => b.profit - a.profit)
 }
 
 export function calculateSalesByChannel(sales: Sale[]) {
-  const salesByChannel: Record<string, number> = {};
+  const salesByChannel: Record<string, number> = {}
   sales.forEach((s) => {
     if (s.status === "completed" && s.sales_channel) {
-      salesByChannel[s.sales_channel] = (salesByChannel[s.sales_channel] || 0) + s.total_amount;
+      salesByChannel[s.sales_channel] = (salesByChannel[s.sales_channel] || 0) + s.total_amount
     }
-  });
-  return salesByChannel;
+  })
+  return salesByChannel
 }
 
 export function getTopCustomers(customers: Customer[]) {
-  return customers.sort((a, b) => b.total_spent - a.total_spent).slice(0, 10); // Changed to 10 for a better list
+  return customers.sort((a, b) => b.total_spent - a.total_spent).slice(0, 10) // Changed to 10 for a better list
 }
 
 export function getBestSellingProduct(sales: Sale[], products: Product[]): Product | undefined {
-  const productSales: { [key: string]: number } = {};
+  const productSales: { [key: string]: number } = {}
 
-  sales.forEach(sale => {
+  sales.forEach((sale) => {
     if (sale.status === "completed") {
-      productSales[sale.product_id] = (productSales[sale.product_id] || 0) + sale.total_amount;
+      productSales[sale.product_id] = (productSales[sale.product_id] || 0) + sale.total_amount
     }
-  });
+  })
 
-  let bestSellingProductId: string | null = null;
-  let maxRevenue = 0;
+  let bestSellingProductId: string | null = null
+  let maxRevenue = 0
 
   for (const productId in productSales) {
     if (productSales[productId] > maxRevenue) {
-      maxRevenue = productSales[productId];
-      bestSellingProductId = productId;
+      maxRevenue = productSales[productId]
+      bestSellingProductId = productId
     }
   }
 
-  return products.find(product => product.id === bestSellingProductId);
+  return products.find((product) => product.id === bestSellingProductId)
 }
 
 export function getWorstSellingProducts(sales: Sale[], products: Product[]): Product[] {
-  const productSales: { [key: string]: number } = {};
+  const productSales: { [key: string]: number } = {}
 
-  sales.forEach(sale => {
+  sales.forEach((sale) => {
     if (sale.status === "completed") {
-      productSales[sale.product_id] = (productSales[sale.product_id] || 0) + sale.total_amount;
+      productSales[sale.product_id] = (productSales[sale.product_id] || 0) + sale.total_amount
     }
-  });
+  })
 
-  const sortedProducts = Object.entries(productSales).sort(([, a], [, b]) => a - b);
+  const sortedProducts = Object.entries(productSales).sort(([, a], [, b]) => a - b)
 
-  const worstSellingProductIds = sortedProducts.slice(0, 5).map(([id]) => id);
+  const worstSellingProductIds = sortedProducts.slice(0, 5).map(([id]) => id)
 
-  return worstSellingProductIds.map(id => products.find(p => p.id === id)).filter((p): p is Product => !!p);
+  return worstSellingProductIds.map((id) => products.find((p) => p.id === id)).filter((p): p is Product => !!p)
+}
+
+export function getHealthScoreInsight(score: number): {
+  status: string
+  description: string
+  color: string
+  recommendations: string[]
+} {
+  if (score >= 80) {
+    return {
+      status: "Excellent",
+      description: "Your business is performing exceptionally well across all key metrics.",
+      color: "text-green-600",
+      recommendations: [
+        "Maintain current strategies",
+        "Focus on scaling operations",
+        "Explore new market opportunities",
+      ],
+    }
+  } else if (score >= 60) {
+    return {
+      status: "Good",
+      description: "Your business is healthy with room for optimization in some areas.",
+      color: "text-blue-600",
+      recommendations: ["Identify underperforming areas", "Optimize cost efficiency", "Improve customer retention"],
+    }
+  } else if (score >= 40) {
+    return {
+      status: "Fair",
+      description: "Your business needs attention in multiple areas to improve performance.",
+      color: "text-amber-600",
+      recommendations: ["Review profit margins", "Reduce operational costs", "Focus on customer acquisition"],
+    }
+  } else {
+    return {
+      status: "Needs Improvement",
+      description: "Your business requires immediate action to address critical issues.",
+      color: "text-red-600",
+      recommendations: ["Urgently review expenses", "Improve revenue streams", "Seek professional guidance"],
+    }
+  }
+}
+
+export function getHealthScoreFactors(): {
+  name: string
+  weight: number
+  description: string
+}[] {
+  return [
+    {
+      name: "Profit Margin",
+      weight: 40,
+      description: "How much profit you make from each sale",
+    },
+    {
+      name: "Growth Trend",
+      weight: 30,
+      description: "Recent sales growth compared to previous period",
+    },
+    {
+      name: "Customer Retention",
+      weight: 20,
+      description: "Percentage of repeat customers",
+    },
+    {
+      name: "Cost Efficiency",
+      weight: 10,
+      description: "How well you manage expenses relative to revenue",
+    },
+  ]
 }

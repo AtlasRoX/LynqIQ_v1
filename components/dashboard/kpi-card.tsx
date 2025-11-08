@@ -13,6 +13,7 @@ interface KPICardProps {
   isPositive?: boolean
   className?: string
   highlight?: boolean
+  description?: string
 }
 
 export function KPICard({
@@ -25,6 +26,7 @@ export function KPICard({
   isPositive = true,
   className,
   highlight = false,
+  description,
 }: KPICardProps) {
   return (
     <Card
@@ -41,8 +43,9 @@ export function KPICard({
                   {title}
                 </p>
               </TooltipTrigger>
-              <TooltipContent>
-                <p>{title}</p>
+              <TooltipContent className="max-w-xs">
+                <p className="font-semibold">{title}</p>
+                {description && <p className="text-xs mt-1 text-muted-foreground">{description}</p>}
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
