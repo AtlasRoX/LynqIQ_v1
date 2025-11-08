@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useRouter } from "next/navigation"
 import { useState } from "react"
+import Image from "next/image"
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -43,7 +44,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen w-full items-center justify-center p-4">
+    <div className="flex min-h-screen w-full flex-col items-center justify-center p-4">
       <div className="w-full max-w-md">
         <Card>
           <CardHeader className="space-y-2 text-center">
@@ -105,6 +106,11 @@ export default function LoginPage() {
           </CardContent>
         </Card>
       </div>
+
+      <footer className="mt-8 flex items-center gap-2 opacity-60 transition-opacity hover:opacity-100">
+        <span className="text-xs text-muted-foreground">Developed by</span>
+        <Image src="/algoverse-logo.png" alt="Algoverse" width={100} height={24} className="h-6 w-auto" />
+      </footer>
     </div>
   )
 }
