@@ -39,7 +39,6 @@ export default function NotificationsPage() {
         .from("dismissed_alerts")
         .select("alert_id")
         .eq("user_id", uid)
-        .returns<DismissedAlert[]>()
 
       if (error) {
         console.error("[v0] Error loading dismissed alerts:", error)
@@ -47,7 +46,7 @@ export default function NotificationsPage() {
       }
 
       if (data) {
-        setDismissedAlerts(new Set(data.map((d) => d.alert_id)))
+        setDismissedAlerts(new Set(data.map((d: DismissedAlert) => d.alert_id)))
       }
     } catch (err) {
       console.error("[v0] Exception loading dismissed alerts:", err)
